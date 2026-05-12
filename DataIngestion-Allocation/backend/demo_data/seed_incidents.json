@@ -1,0 +1,104 @@
+{
+  "incidents": [
+    {
+      "incident_id": "demo_kerala_floods_2026",
+      "incident_name": "Kerala Floods 2026",
+      "incident_type": "flood",
+      "location": "Kerala, India",
+      "title": "Severe Flooding in Kerala — Multiple Districts Affected",
+      "severity": 8,
+      "summary": "Heavy monsoon rains have caused severe flooding across multiple districts in Kerala. Thousands of people have been evacuated from low-lying areas. Major roads and bridges are damaged, and several villages are cut off from access.",
+      "created_at": "2026-05-10T10:00:00Z",
+      "status": "active"
+    },
+    {
+      "incident_id": "demo_earthquake_himachal_2026",
+      "incident_name": "Earthquake Himachal Pradesh 2026",
+      "incident_type": "earthquake",
+      "location": "Himachal Pradesh, India",
+      "title": "6.2 Magnitude Earthquake Strikes Himachal Pradesh",
+      "severity": 7,
+      "summary": "A 6.2 magnitude earthquake has struck the Himachal Pradesh region. Multiple buildings have collapsed, and there are reports of casualties. Rescue operations are underway in affected areas.",
+      "created_at": "2026-05-09T14:30:00Z",
+      "status": "active"
+    },
+    {
+      "incident_id": "demo_cyclone_odisha_2026",
+      "incident_name": "Cyclone Remal — Odisha Coast 2026",
+      "incident_type": "cyclone",
+      "location": "Odisha, India",
+      "title": "Cyclone Remal Approaches Odisha Coast",
+      "severity": 9,
+      "summary": "Cyclone Remal is approaching the Odisha coast with wind speeds exceeding 150 km/h. Coastal areas have been evacuated, and fishing boats have been recalled. Heavy rainfall and storm surge are expected.",
+      "created_at": "2026-05-08T08:00:00Z",
+      "status": "active"
+    }
+  ],
+  "seed_need_cards": [
+    {
+      "id": "demo_card_001",
+      "incident_id": "demo_kerala_floods_2026",
+      "type": "food",
+      "item": "Rice Packets",
+      "qty": 500,
+      "explanation": "Immediate food supply needed for evacuated families in relief camps",
+      "note": "Distribute through local relief centers",
+      "fulfilled": false,
+      "done_by": null,
+      "pending_approval": false,
+      "show_pd": true
+    },
+    {
+      "id": "demo_card_002",
+      "incident_id": "demo_kerala_floods_2026",
+      "type": "water",
+      "item": "Water Purification Tablets",
+      "qty": 1000,
+      "explanation": "Contaminated water sources require purification for drinking",
+      "note": "Distribute to affected villages",
+      "fulfilled": false,
+      "done_by": null,
+      "pending_approval": false,
+      "show_pd": true
+    },
+    {
+      "id": "demo_card_003",
+      "incident_id": "demo_kerala_floods_2026",
+      "type": "meds",
+      "item": "First Aid Kits",
+      "qty": 50,
+      "explanation": "Medical supplies for treating injuries from flooding",
+      "note": "Send to primary health centers",
+      "fulfilled": false,
+      "done_by": null,
+      "pending_approval": false,
+      "show_pd": true
+    },
+    {
+      "id": "demo_card_004",
+      "incident_id": "demo_earthquake_himachal_2026",
+      "type": "rescue_team",
+      "item": "Search and Rescue Team",
+      "qty": 2,
+      "explanation": "Urgent need for rescue teams to search for survivors in collapsed buildings",
+      "note": "Deploy to Shimla district",
+      "fulfilled": false,
+      "done_by": null,
+      "pending_approval": false,
+      "show_pd": true
+    },
+    {
+      "id": "demo_card_005",
+      "incident_id": "demo_cyclone_odisha_2026",
+      "type": "food",
+      "item": "Emergency Rations",
+      "qty": 1000,
+      "explanation": "Pre-positioned supplies for post-cyclone relief",
+      "note": "Store in safe locations away from storm surge",
+      "fulfilled": false,
+      "done_by": null,
+      "pending_approval": false,
+      "show_pd": true
+    }
+  ]
+}

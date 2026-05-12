@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=DM+Serif+Display:ital@0;1&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-primary: #F8F7F4;
+    --bg-secondary: #EFEDE8;
+    --bg-card: #FFFFFF;
+    --border: #E2DDD6;
+    --text-primary: #1A1714;
+    --text-secondary: #6B6560;
+    --text-muted: #9E9890;
+    --accent-red: #C0392B;
+    --accent-amber: #D97706;
+    --accent-green: #15803D;
+    --accent-blue: #3B82F6;
+    --accent-blue-light: #EFF6FF;
+    --sidebar-bg: #1A1714;
+    --sidebar-text: #E8E4DE;
+    --radius: 6px;
+  }
+
+  html {
+    font-size: 15px;
+    font-family: "DM Sans", sans-serif;
+  }
+  
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+  }
+}

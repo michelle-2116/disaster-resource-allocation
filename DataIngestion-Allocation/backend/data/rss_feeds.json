@@ -1,0 +1,263 @@
+{
+  "feeds": {
+    "ndma_india_national": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_india.xml",
+      "tags": ["india", "national", "disaster", "alert", "ndma", "emergency"],
+      "region": "India (National)",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_andaman": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_andaman.xml",
+      "tags": ["india", "andaman", "disaster", "alert", "ndma"],
+      "region": "Andaman and Nicobar",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_andhra": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_andhra.xml",
+      "tags": ["india", "andhra", "andhra pradesh", "disaster", "alert", "ndma"],
+      "region": "Andhra Pradesh",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_arunachal": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_arunachal.xml",
+      "tags": ["india", "arunachal", "arunachal pradesh", "disaster", "alert", "ndma"],
+      "region": "Arunachal Pradesh",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_assam": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_assam.xml",
+      "tags": ["india", "assam", "disaster", "alert", "ndma"],
+      "region": "Assam",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_bihar": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_bihar.xml",
+      "tags": ["india", "bihar", "disaster", "alert", "ndma"],
+      "region": "Bihar",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_chandigarh": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_chandigarh.xml",
+      "tags": ["india", "chandigarh", "disaster", "alert", "ndma"],
+      "region": "Chandigarh",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_chhattisgarh": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_chhattisgarh.xml",
+      "tags": ["india", "chhattisgarh", "disaster", "alert", "ndma"],
+      "region": "Chhattisgarh",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_dadra": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_dadra.xml",
+      "tags": ["india", "dadra", "nagar haveli", "disaster", "alert", "ndma"],
+      "region": "Dadra and Nagar Haveli",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_delhi": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_delhi.xml",
+      "tags": ["india", "delhi", "new delhi", "disaster", "alert", "ndma"],
+      "region": "Delhi",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_goa": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_goa.xml",
+      "tags": ["india", "goa", "disaster", "alert", "ndma"],
+      "region": "Goa",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_gujarat": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_gujarat.xml",
+      "tags": ["india", "gujarat", "disaster", "alert", "ndma"],
+      "region": "Gujarat",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_haryana": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_haryana.xml",
+      "tags": ["india", "haryana", "disaster", "alert", "ndma"],
+      "region": "Haryana",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_himachal": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_himachal.xml",
+      "tags": ["india", "himachal", "himachal pradesh", "disaster", "alert", "ndma"],
+      "region": "Himachal Pradesh",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_jammu": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_jammu.xml",
+      "tags": ["india", "jammu", "kashmir", "jammu and kashmir", "disaster", "alert", "ndma"],
+      "region": "Jammu and Kashmir",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_jharkhand": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_jharkhand.xml",
+      "tags": ["india", "jharkhand", "disaster", "alert", "ndma"],
+      "region": "Jharkhand",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_karnataka": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_karnataka.xml",
+      "tags": ["india", "karnataka", "disaster", "alert", "ndma"],
+      "region": "Karnataka",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_kerala": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_kerala.xml",
+      "tags": ["india", "kerala", "disaster", "alert", "ndma"],
+      "region": "Kerala",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_ladakh": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_ladakh.xml",
+      "tags": ["india", "ladakh", "disaster", "alert", "ndma"],
+      "region": "Ladakh",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_lakshadweep": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_lakshadweep.xml",
+      "tags": ["india", "lakshadweep", "disaster", "alert", "ndma"],
+      "region": "Lakshadweep",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_madhya": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_madhya.xml",
+      "tags": ["india", "madhya", "madhya pradesh", "disaster", "alert", "ndma"],
+      "region": "Madhya Pradesh",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_maharashtra": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_maharashtra.xml",
+      "tags": ["india", "maharashtra", "disaster", "alert", "ndma"],
+      "region": "Maharashtra",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_manipur": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_manipur.xml",
+      "tags": ["india", "manipur", "disaster", "alert", "ndma"],
+      "region": "Manipur",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_meghalaya": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_meghalaya.xml",
+      "tags": ["india", "meghalaya", "disaster", "alert", "ndma"],
+      "region": "Meghalaya",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_mizoram": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_mizoram.xml",
+      "tags": ["india", "mizoram", "disaster", "alert", "ndma"],
+      "region": "Mizoram",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_nagaland": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_nagaland.xml",
+      "tags": ["india", "nagaland", "disaster", "alert", "ndma"],
+      "region": "Nagaland",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_odisha": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_odisha.xml",
+      "tags": ["india", "odisha", "orissa", "disaster", "alert", "ndma"],
+      "region": "Odisha",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_puducherry": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_puducherry.xml",
+      "tags": ["india", "puducherry", "pondicherry", "disaster", "alert", "ndma"],
+      "region": "Puducherry",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_punjab": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_punjab.xml",
+      "tags": ["india", "punjab", "disaster", "alert", "ndma"],
+      "region": "Punjab",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_rajasthan": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_rajasthan.xml",
+      "tags": ["india", "rajasthan", "disaster", "alert", "ndma"],
+      "region": "Rajasthan",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_sikkim": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_sikkim.xml",
+      "tags": ["india", "sikkim", "disaster", "alert", "ndma"],
+      "region": "Sikkim",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_tamil": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_tamil.xml",
+      "tags": ["india", "tamil", "tamil nadu", "disaster", "alert", "ndma"],
+      "region": "Tamil Nadu",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_telangana": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_telangana.xml",
+      "tags": ["india", "telangana", "disaster", "alert", "ndma"],
+      "region": "Telangana",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_tripura": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_tripura.xml",
+      "tags": ["india", "tripura", "disaster", "alert", "ndma"],
+      "region": "Tripura",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_uttarakhand": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_uttarakhand.xml",
+      "tags": ["india", "uttarakhand", "disaster", "alert", "ndma"],
+      "region": "Uttarakhand",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_uttar": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_uttar.xml",
+      "tags": ["india", "uttar", "uttar pradesh", "disaster", "alert", "ndma"],
+      "region": "Uttar Pradesh",
+      "country": "India",
+      "source": "NDMA"
+    },
+    "ndma_west": {
+      "url": "https://sachet.ndma.gov.in/cap_public_website/rss/rss_west.xml",
+      "tags": ["india", "west", "west bengal", "disaster", "alert", "ndma"],
+      "region": "West Bengal",
+      "country": "India",
+      "source": "NDMA"
+    }
+  }
+}
