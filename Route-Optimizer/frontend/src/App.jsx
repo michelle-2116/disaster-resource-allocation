@@ -37,7 +37,7 @@ function App() {
       <div className="w-[380px] bg-slate-900 border-r border-slate-800 flex flex-col shadow-2xl z-10">
         <div className="p-6 border-b border-slate-800 flex justify-between items-center">
           <h1 className="text-xl font-black uppercase tracking-tighter italic flex items-center gap-2">
-            <Activity className="text-blue-500" /> AEGIS AGENT
+            <Activity className="text-blue-500" /> Routing Agent
           </h1>
           <button onClick={() => axios.post(`${API_BASE}/system/reset`).then(loadAll)} className="text-red-500 hover:scale-110 transition-all"><ShieldAlert size={20}/></button>
         </div>

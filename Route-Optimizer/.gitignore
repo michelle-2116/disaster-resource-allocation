@@ -49,3 +49,4 @@ yarn-error.log*
 pnpm-debug.log*
 
 notes.txt
+supabase.txt
