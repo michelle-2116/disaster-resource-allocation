@@ -81,7 +81,7 @@ function App() {
         </div>
 
         {/* AGENT OUTPUT PANEL */}
-        <div className="h-80 bg-slate-900 border-t border-slate-800 p-6 grid grid-cols-2 gap-8 shadow-2xl">
+        <div className="h-57 bg-slate-900 border-t border-slate-800 p-6 grid grid-cols-2 gap-8 shadow-2xl">
           
           {/* AUTO-GENERATED NEEDS */}
           <div className="border-r border-slate-800 pr-8 overflow-y-auto custom-scrollbar">
