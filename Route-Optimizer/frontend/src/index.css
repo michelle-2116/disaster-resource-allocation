@@ -72,3 +72,12 @@ body {
 .map-pin-block {
     background: #ea580c;
 }
+
+.map-pin-draft-block {
+    background: #ca8a04;
+}
+
+.map-pin-detour {
+    background: #7c3aed;
+    font-size: 15px;
+}

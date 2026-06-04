@@ -44,10 +44,10 @@ export default function AdminDashboard() {
       if (allRes.error) {
         setError(allRes.error);
         showToast(`Error fetching data: ${allRes.error}`, 'error');
-        return;
-      }
-
-      if (allRes.data) {
+        setQueue([]);
+        setAllCards([]);
+        setStats({ published: 0, fulfilled: 0, open: 0 });
+      } else if (allRes.data) {
         setAllCards(allRes.data);
         const pendingCards = allRes.data.filter(
           c => c.pending_approval === true && c.show_pd === false && c.fulfilled === false
@@ -64,12 +64,12 @@ export default function AdminDashboard() {
       if (feedRes.data) {
         setFeedItems(feedRes.data);
       }
-      
-      setLoading(false);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to fetch data';
       setError(errorMsg);
       showToast(errorMsg, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 

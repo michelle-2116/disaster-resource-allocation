@@ -14,7 +14,7 @@ import {
   Warehouse,
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
 
 const quickReports = [
   'Discord: Floodwater blocking Chundale bridge near Vythiri',
@@ -40,6 +40,7 @@ function App() {
   });
   const [discordMessage, setDiscordMessage] = useState(quickReports[0]);
   const [loading, setLoading] = useState(false);
+  const [lastAction, setLastAction] = useState('');
 
   const loadAll = async () => {
     const res = await axios.get(`${API_BASE}/map-data`);
@@ -57,9 +58,19 @@ function App() {
 
   const routeStats = useMemo(() => {
     const totalKm = (data.dispatches ?? []).reduce((sum, dispatch) => sum + (dispatch.distance || 0) / 1000, 0);
-    const rerouted = (data.dispatches ?? []).filter((dispatch) => dispatch.rerouted).length;
+    const rerouted = [...(data.dispatches ?? []), ...(data.suggested_routes ?? [])].filter((route) => route.rerouted).length;
     return { totalKm, rerouted };
-  }, [data.dispatches]);
+  }, [data.dispatches, data.suggested_routes]);
+
+  const routeExplanations = useMemo(
+    () => [...(data.dispatches ?? []), ...(data.suggested_routes ?? [])],
+    [data.dispatches, data.suggested_routes],
+  );
+
+  const handleMapBlockPoint = ({ lat, lng }) => {
+    setBlockForm((prev) => ({ ...prev, lat, lng }));
+    setLastAction(`Selected road block point ${lat}, ${lng}. Submit the form to recalculate routes.`);
+  };
 
   const handleApprove = async (id) => {
     setLoading(true);
@@ -79,6 +90,7 @@ function App() {
       source: 'admin',
     });
     await loadAll();
+    setLastAction('Road block added. Suggested and active routes were recalculated around the blocked radius.');
     setLoading(false);
   };
 
@@ -89,6 +101,7 @@ function App() {
       author: 'wayanad-relief-discord',
     });
     await loadAll();
+    setLastAction('Discord road report ingested. Routes were recalculated with the new road block.');
     setLoading(false);
   };
 
@@ -155,6 +168,9 @@ function App() {
               <CircleSlash size={20} /> Road Blocks
             </h2>
             <form onSubmit={handleAdminBlock} className="border border-zinc-800 bg-zinc-900 p-4 rounded-md space-y-4">
+              <p className="text-sm text-zinc-400">
+                Click anywhere on the map to fill latitude and longitude, then submit to mark the blocked road and recalculate routes.
+              </p>
               <div className="grid grid-cols-3 gap-3">
                 <input
                   className="bg-zinc-950 border border-zinc-800 rounded px-3 py-3 text-base outline-none focus:border-cyan-500"
@@ -184,7 +200,25 @@ function App() {
               <button disabled={loading} className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:opacity-60 py-3 rounded text-base font-bold">
                 Add Admin Block
               </button>
+              {lastAction && <p className="text-sm text-cyan-300 leading-6">{lastAction}</p>}
             </form>
+
+            <div className="border border-zinc-800 bg-zinc-900 p-4 rounded-md space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-base font-bold text-white">Marked road blocks</p>
+                <span className="text-xs font-mono text-orange-300">{data.blocked_roads?.length ?? 0}</span>
+              </div>
+              <div className="space-y-2 max-h-44 overflow-y-auto custom-scrollbar pr-1">
+                {data.blocked_roads?.map((block) => (
+                  <div key={block.id} className="bg-zinc-950 border border-orange-500/20 p-3 rounded">
+                    <p className="text-sm font-bold text-orange-200">{block.reason}</p>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      {Number(block.lat).toFixed(4)}, {Number(block.lng).toFixed(4)} | {Math.round(block.radius_meters ?? 800)} m | {block.source}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <div className="border border-zinc-800 bg-zinc-900 p-4 rounded-md space-y-4">
               <div className="flex items-center justify-between">
@@ -229,7 +263,7 @@ function App() {
         </div>
 
         <div className="flex-1 relative min-h-0">
-          <DisasterMap data={data} />
+          <DisasterMap data={data} blockDraft={blockForm} onBlockPointSelected={handleMapBlockPoint} />
         </div>
 
         <div className="h-[360px] min-h-[300px] bg-zinc-925 border-t border-zinc-800 p-6 grid grid-cols-2 gap-6 overflow-hidden">
@@ -263,25 +297,28 @@ function App() {
 
           <section className="min-w-0 overflow-y-auto custom-scrollbar">
             <h2 className="flex items-center gap-2 font-black text-sm tracking-widest mb-4 text-emerald-300 uppercase">
-              <Truck size={22} /> Active Missions
+              <Truck size={22} /> Route Decisions
             </h2>
             <div className="space-y-3">
-              {data.dispatches?.map((dispatch) => (
-                <div key={dispatch.id} className="bg-zinc-950 p-4 rounded-md border border-zinc-800">
+              {routeExplanations.map((route) => (
+                <div key={route.id} className="bg-zinc-950 p-4 rounded-md border border-zinc-800">
                   <div className="flex justify-between gap-3 text-sm mb-2">
-                    <span className="text-emerald-300 font-bold truncate">{dispatch.warehouse_name}</span>
-                    <span className="text-zinc-400 font-mono">{(dispatch.distance / 1000).toFixed(1)} km</span>
+                    <span className={route.status === 'suggested' ? 'text-amber-300 font-bold truncate' : 'text-emerald-300 font-bold truncate'}>
+                      {route.status === 'suggested' ? 'Suggested path' : 'Active dispatch'}
+                    </span>
+                    <span className="text-zinc-400 font-mono">{(route.distance / 1000).toFixed(1)} km</span>
                   </div>
-                  <p className="text-base text-white truncate">{dispatch.item_type} to {dispatch.shelter_name}</p>
-                  <div className="mt-3 flex items-center justify-between text-sm text-zinc-500">
-                    <span>{Math.round(dispatch.estimated_time / 60)} min ETA</span>
-                    <span className={dispatch.rerouted ? 'text-violet-300' : 'text-zinc-500'}>
-                      {dispatch.rerouted ? 'rerouted around block' : 'best available path'}
+                  <p className="text-base text-white truncate">{route.item_type} to {route.shelter_name}</p>
+                  <p className="mt-2 text-sm leading-6 text-zinc-400">{route.route_explanation}</p>
+                  <div className="mt-3 flex items-center justify-between gap-3 text-sm text-zinc-500">
+                    <span>{Math.round(route.estimated_time / 60)} min ETA</span>
+                    <span className={route.rerouted ? 'text-violet-300' : 'text-zinc-500'}>
+                      {route.rerouted ? `avoids ${route.blocked_by_reason ?? route.blocked_by}` : 'direct optimized path'}
                     </span>
                   </div>
                 </div>
               ))}
-              {(!data.dispatches || data.dispatches.length === 0) && <p className="text-zinc-600 text-base pt-8 text-center">Approve a need to create the best route.</p>}
+              {routeExplanations.length === 0 && <p className="text-zinc-600 text-base pt-8 text-center">Approve a need or inspect a suggested route to see optimization reasoning.</p>}
             </div>
           </section>
         </div>

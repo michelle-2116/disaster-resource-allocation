@@ -28,21 +28,50 @@ def _point_segment_distance_m(point, start, end):
 
 
 def _blocked_route_segment(start, end, avoid_points):
+    closest = None
     for block in avoid_points or []:
         radius = float(block.get("radius_meters", 700))
-        if _point_segment_distance_m(block, start, end) <= radius + 450:
-            return block
-    return None
+        distance = _point_segment_distance_m(block, start, end)
+        if distance <= radius + 450:
+            candidate = (distance - radius, block)
+            if closest is None or candidate[0] < closest[0]:
+                closest = candidate
+    return closest[1] if closest else None
 
 
-def _detour_waypoint(start, end, block):
+def _route_geometry_points(route):
+    return [
+        {"lng": coord[0], "lat": coord[1]}
+        for coord in route.get("geometry", {}).get("coordinates", [])
+        if len(coord) >= 2
+    ]
+
+
+def _blocked_route_geometry(route, avoid_points):
+    points = _route_geometry_points(route)
+    if len(points) < 2:
+        return None
+
+    closest = None
+    for block in avoid_points or []:
+        radius = float(block.get("radius_meters", 700))
+        for index in range(len(points) - 1):
+            distance = _point_segment_distance_m(block, points[index], points[index + 1])
+            if distance <= radius + 140:
+                candidate = (distance - radius, block)
+                if closest is None or candidate[0] < closest[0]:
+                    closest = candidate
+    return closest[1] if closest else None
+
+
+def _detour_waypoint(start, end, block, side=1):
     dx = end["lng"] - start["lng"]
     dy = end["lat"] - start["lat"]
     length = math.sqrt(dx * dx + dy * dy) or 1
-    offset = max(float(block.get("radius_meters", 800)) / 111000, 0.012)
+    offset = max(float(block.get("radius_meters", 800)) / 111000 + 0.018, 0.025)
     return {
-        "lat": block["lat"] + (dx / length) * offset,
-        "lng": block["lng"] - (dy / length) * offset,
+        "lat": block["lat"] + side * (dx / length) * offset,
+        "lng": block["lng"] - side * (dy / length) * offset,
     }
 
 
@@ -75,20 +104,43 @@ def _fallback_route(points):
 def get_route(start_lat, start_lng, end_lat, end_lng, avoid_points=None):
     start = {"lat": start_lat, "lng": start_lng}
     end = {"lat": end_lat, "lng": end_lng}
-    blocked_by = _blocked_route_segment(start, end, avoid_points)
-
-    points = [start, end]
-    if blocked_by:
-        points = [start, _detour_waypoint(start, end, blocked_by), end]
-
+    direct_points = [start, end]
     try:
-        route = _request_route(points)
+        direct_route = _request_route(direct_points)
     except requests.RequestException:
-        route = None
+        direct_route = None
 
-    if not route:
-        route = _fallback_route(points)
+    if not direct_route:
+        direct_route = _fallback_route(direct_points)
+
+    blocked_by = _blocked_route_geometry(direct_route, avoid_points)
+    if not blocked_by:
+        blocked_by = _blocked_route_segment(start, end, avoid_points)
+
+    route = direct_route
+    detour = None
+    if blocked_by:
+        candidates = []
+        for side in (1, -1):
+            waypoint = _detour_waypoint(start, end, blocked_by, side=side)
+            points = [start, waypoint, end]
+            try:
+                candidate = _request_route(points)
+            except requests.RequestException:
+                candidate = None
+            if not candidate:
+                candidate = _fallback_route(points)
+            candidate["detour_waypoint"] = waypoint
+            candidate["still_intersects_block"] = _blocked_route_geometry(candidate, [blocked_by]) is not None
+            candidates.append(candidate)
+
+        candidates.sort(key=lambda item: (item["still_intersects_block"], item["distance"]))
+        route = candidates[0]
+        detour = route["detour_waypoint"]
 
     route["rerouted"] = bool(blocked_by)
     route["blocked_by"] = blocked_by["id"] if blocked_by else None
+    route["blocked_by_reason"] = blocked_by.get("reason") if blocked_by else None
+    route["detour_waypoint"] = detour
+    route["still_intersects_block"] = route.get("still_intersects_block", False)
     return route

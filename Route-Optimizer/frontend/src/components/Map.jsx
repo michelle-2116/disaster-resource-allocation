@@ -1,4 +1,4 @@
-import { Circle, MapContainer, Marker, Polyline, Popup, TileLayer } from 'react-leaflet';
+import { Circle, MapContainer, Marker, Polyline, Popup, TileLayer, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -14,6 +14,8 @@ const icons = {
   warehouse: marker('map-pin map-pin-warehouse', 'W'),
   shelter: marker('map-pin map-pin-shelter', 'S'),
   block: marker('map-pin map-pin-block', '!'),
+  draftBlock: marker('map-pin map-pin-draft-block', '+'),
+  detour: marker('map-pin map-pin-detour', 'D'),
 };
 
 const severityColor = {
@@ -23,11 +25,27 @@ const severityColor = {
   low: '#38bdf8',
 };
 
-function DisasterMap({ data }) {
+function MapClickHandler({ onBlockPointSelected }) {
+  useMapEvents({
+    click(event) {
+      onBlockPointSelected?.({
+        lat: event.latlng.lat.toFixed(5),
+        lng: event.latlng.lng.toFixed(5),
+      });
+    },
+  });
+  return null;
+}
+
+function DisasterMap({ data, blockDraft, onBlockPointSelected }) {
   const center = data.center ? [data.center.lat, data.center.lng] : [11.6854, 76.132];
+  const draftLat = Number(blockDraft?.lat);
+  const draftLng = Number(blockDraft?.lng);
+  const hasDraftPoint = Number.isFinite(draftLat) && Number.isFinite(draftLng);
 
   return (
     <MapContainer center={center} zoom={11} minZoom={9} className="h-full w-full">
+      <MapClickHandler onBlockPointSelected={onBlockPointSelected} />
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -58,50 +76,60 @@ function DisasterMap({ data }) {
       {data.dispatches?.map((dispatch) => {
         const positions = dispatch.route_geometry?.coordinates?.map((coord) => [coord[1], coord[0]]) ?? [];
         return (
-          <Polyline
+          <RoutePolyline
             key={dispatch.id}
+            route={dispatch}
             positions={positions}
-            color={dispatch.rerouted ? '#a78bfa' : '#06b6d4'}
-            weight={8}
-            opacity={0.9}
-            dashArray={dispatch.rerouted ? '14 10' : undefined}
-          >
-            <Popup>
-              <strong>{dispatch.item_type} dispatch</strong>
-              <br />
-              {dispatch.warehouse_name} to {dispatch.shelter_name}
-              <br />
-              {(dispatch.distance / 1000).toFixed(1)} km | {Math.round(dispatch.estimated_time / 60)} min
-              <br />
-              {dispatch.rerouted ? 'Rerouted around a blocked road' : 'Best available path'}
-            </Popup>
-          </Polyline>
+            color={dispatch.rerouted ? '#c084fc' : '#06b6d4'}
+            weight={dispatch.rerouted ? 10 : 8}
+            dashArray={dispatch.rerouted ? '16 8' : undefined}
+            title={`${dispatch.item_type} dispatch`}
+          />
         );
       })}
+
+      {data.dispatches?.filter((dispatch) => dispatch.detour_waypoint).map((dispatch) => (
+        <Marker
+          key={`${dispatch.id}-detour`}
+          position={[dispatch.detour_waypoint.lat, dispatch.detour_waypoint.lng]}
+          icon={icons.detour}
+        >
+          <Popup>
+            <strong>Detour waypoint</strong>
+            <br />
+            Route bends here to avoid: {dispatch.blocked_by_reason ?? dispatch.blocked_by}
+          </Popup>
+        </Marker>
+      ))}
 
       {data.suggested_routes?.map((route) => {
         const positions = route.route_geometry?.coordinates?.map((coord) => [coord[1], coord[0]]) ?? [];
         return (
-          <Polyline
+          <RoutePolyline
             key={route.id}
+            route={route}
             positions={positions}
             color={route.rerouted ? '#f59e0b' : '#94a3b8'}
-            weight={6}
-            opacity={0.82}
-            dashArray="8 10"
-          >
-            <Popup>
-              <strong>Suggested best path</strong>
-              <br />
-              {route.item_type} from {route.warehouse_name}
-              <br />
-              to {route.shelter_name}
-              <br />
-              {(route.distance / 1000).toFixed(1)} km | {Math.round(route.estimated_time / 60)} min
-            </Popup>
-          </Polyline>
+            weight={route.rerouted ? 9 : 6}
+            dashArray={route.rerouted ? '18 8' : '8 10'}
+            title="Suggested updated path"
+          />
         );
       })}
+
+      {data.suggested_routes?.filter((route) => route.detour_waypoint).map((route) => (
+        <Marker
+          key={`${route.id}-detour`}
+          position={[route.detour_waypoint.lat, route.detour_waypoint.lng]}
+          icon={icons.detour}
+        >
+          <Popup>
+            <strong>Suggested detour waypoint</strong>
+            <br />
+            Avoids: {route.blocked_by_reason ?? route.blocked_by}
+          </Popup>
+        </Marker>
+      ))}
 
       {data.warehouses?.map((warehouse) => (
         <Marker key={warehouse.id} position={[warehouse.lat, warehouse.lng]} icon={icons.warehouse}>
@@ -139,6 +167,8 @@ function DisasterMap({ data }) {
             <br />
             {block.reason}
             <br />
+            Radius: {Math.round(block.radius_meters ?? 800)} m
+            <br />
             Source: {block.source}
           </Popup>
         </Circle>
@@ -149,7 +179,61 @@ function DisasterMap({ data }) {
           <Popup>{block.reason}</Popup>
         </Marker>
       ))}
+
+      {hasDraftPoint && (
+        <>
+          <Circle
+            center={[draftLat, draftLng]}
+            radius={Number(blockDraft.radius_meters) || 800}
+            pathOptions={{ color: '#facc15', fillColor: '#facc15', fillOpacity: 0.16, weight: 3, dashArray: '8 8' }}
+          />
+          <Marker position={[draftLat, draftLng]} icon={icons.draftBlock}>
+            <Popup>
+              <strong>New road block location</strong>
+              <br />
+              Submit the form to mark this block and recalculate routes.
+            </Popup>
+          </Marker>
+        </>
+      )}
     </MapContainer>
+  );
+}
+
+function RoutePolyline({ route, positions, color, weight, dashArray, title }) {
+  if (!positions.length) return null;
+
+  return (
+    <>
+      <Polyline
+        positions={positions}
+        color="#0f172a"
+        weight={weight + 5}
+        opacity={0.75}
+        dashArray={dashArray}
+      />
+      <Polyline
+        positions={positions}
+        color={color}
+        weight={weight}
+        opacity={0.96}
+        dashArray={dashArray}
+      >
+        <Popup>
+          <strong>{title}</strong>
+          <br />
+          {route.item_type} from {route.warehouse_name}
+          <br />
+          to {route.shelter_name}
+          <br />
+          {(route.distance / 1000).toFixed(1)} km | {Math.round(route.estimated_time / 60)} min
+          <br />
+          {route.rerouted ? 'Updated route avoids blocked road' : 'Current optimized route'}
+          <br />
+          {route.route_explanation}
+        </Popup>
+      </Polyline>
+    </>
   );
 }
 

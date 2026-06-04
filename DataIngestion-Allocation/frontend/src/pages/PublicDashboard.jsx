@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, getIncident, isDemoModeEnabled, setDemoMode as setDemoModeGlobal, initDemoMode } from '../services/api';
@@ -33,10 +33,12 @@ export default function PublicDashboard() {
   const [fulfilledCount, setFulfilledCount] = useState(0);
   const [error, setError] = useState(null);
   const [demoMode, setDemoModeState] = useState(isDemoModeEnabled());
+  const [demoModeLocked, setDemoModeLocked] = useState(false);
   const [currentIncident, setCurrentIncident] = useState(getIncident());
   
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedCard, setSelectedCard] = useState(null);
+  const lastErrorRef = useRef(null);
 
   // Update currentIncident when component mounts or when navigating back
   useEffect(() => {
@@ -45,8 +47,24 @@ export default function PublicDashboard() {
     setCurrentIncident(incident);
   }, []);
 
+  useEffect(() => {
+    api.getDemoStatus().then((res) => {
+      if (!res.data) return;
+
+      const effectiveDemoMode = Boolean(res.data.demo_mode_enabled);
+      setDemoModeState(effectiveDemoMode);
+      setDemoModeGlobal(effectiveDemoMode);
+      setDemoModeLocked(effectiveDemoMode && res.data.supabase_configured === false);
+    });
+  }, []);
+
   // Handle demo mode toggle
   const handleDemoModeToggle = () => {
+    if (demoModeLocked) {
+      showToast('Demo mode is required locally because Supabase is not configured.', 'info');
+      return;
+    }
+
     const newMode = !demoMode;
     setDemoModeGlobal(newMode);
     setDemoModeState(newMode);
@@ -95,25 +113,31 @@ export default function PublicDashboard() {
 
       if (allCardsRes.error) {
         setError(allCardsRes.error);
-        showToast(`Error fetching data: ${allCardsRes.error}`, 'error');
-        return;
-      }
-
-      if (allCardsRes.data) {
+        if (lastErrorRef.current !== allCardsRes.error) {
+          showToast(`Error fetching data: ${allCardsRes.error}`, 'error');
+          lastErrorRef.current = allCardsRes.error;
+        }
+        setNeedCards([]);
+        setFulfilledCount(0);
+      } else if (allCardsRes.data) {
         setNeedCards(allCardsRes.data);
         setFulfilledCount(allCardsRes.data.filter(c => c.fulfilled).length);
         setError(null);
+        lastErrorRef.current = null;
       }
       
       if (feedRes.data) {
         setFeedItems(feedRes.data);
       }
-      
-      setLoading(false);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to fetch data';
       setError(errorMsg);
-      showToast(errorMsg, 'error');
+      if (lastErrorRef.current !== errorMsg) {
+        showToast(errorMsg, 'error');
+        lastErrorRef.current = errorMsg;
+      }
+    } finally {
+      setLoading(false);
     }
   };
 

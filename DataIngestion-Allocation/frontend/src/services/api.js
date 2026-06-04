@@ -448,6 +448,17 @@ const realApi = {
     } catch (error) {
       return { data: [], error: error.message };
     }
+  },
+
+  async getDemoStatus() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/demo/status`);
+      if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
+      const data = await res.json();
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error: error.message };
+    }
   }
 };
 
@@ -485,5 +496,9 @@ export const api = {
 
   async getActivityFeed() {
     return realApi.getActivityFeed();
+  },
+
+  async getDemoStatus() {
+    return realApi.getDemoStatus();
   }
 };

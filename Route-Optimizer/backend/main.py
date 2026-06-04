@@ -200,6 +200,8 @@ def dispatch_for_need(need: dict) -> dict:
     mutate_inventory(warehouse["id"], need["item_type"], need["requested_qty"])
     need["status"] = "approved"
 
+    explanation = route_explanation(route, warehouse, shelter)
+
     return {
         "id": f"dispatch-{uuid4()}",
         "need_card_id": need["id"],
@@ -214,6 +216,9 @@ def dispatch_for_need(need: dict) -> dict:
         "estimated_time": route["duration"],
         "rerouted": route["rerouted"],
         "blocked_by": route["blocked_by"],
+        "blocked_by_reason": route.get("blocked_by_reason"),
+        "detour_waypoint": route.get("detour_waypoint"),
+        "route_explanation": explanation,
         "status": "en_route",
     }
 
@@ -232,6 +237,7 @@ def route_preview_for_need(need: dict) -> dict | None:
         shelter["lng"],
         avoid_points=state["blocked_roads"],
     )
+    explanation = route_explanation(route, warehouse, shelter)
     return {
         "id": f"preview-{need['id']}",
         "need_card_id": need["id"],
@@ -246,6 +252,9 @@ def route_preview_for_need(need: dict) -> dict | None:
         "estimated_time": route["duration"],
         "rerouted": route["rerouted"],
         "blocked_by": route["blocked_by"],
+        "blocked_by_reason": route.get("blocked_by_reason"),
+        "detour_waypoint": route.get("detour_waypoint"),
+        "route_explanation": explanation,
         "status": "suggested",
     }
 
@@ -260,6 +269,7 @@ def rebuild_dispatches() -> None:
             choose_warehouse(shelter, need["item_type"], 1),
         )
         route = get_route(warehouse["lat"], warehouse["lng"], shelter["lat"], shelter["lng"], avoid_points=state["blocked_roads"])
+        explanation = route_explanation(route, warehouse, shelter)
         rebuilt.append({
             "id": next((d["id"] for d in state["dispatches"] if d["need_card_id"] == need["id"]), f"dispatch-{uuid4()}"),
             "need_card_id": need["id"],
@@ -274,9 +284,28 @@ def rebuild_dispatches() -> None:
             "estimated_time": route["duration"],
             "rerouted": route["rerouted"],
             "blocked_by": route["blocked_by"],
+            "blocked_by_reason": route.get("blocked_by_reason"),
+            "detour_waypoint": route.get("detour_waypoint"),
+            "route_explanation": explanation,
             "status": "rerouted" if route["rerouted"] else "en_route",
         })
     state["dispatches"] = rebuilt
+
+
+def route_explanation(route: dict, warehouse: dict, shelter: dict) -> str:
+    distance_km = route["distance"] / 1000
+    eta_min = round(route["duration"] / 60)
+    if route.get("rerouted"):
+        reason = route.get("blocked_by_reason") or "a reported road block"
+        return (
+            f"Optimized route from {warehouse['name']} to {shelter['name']} avoids {reason}. "
+            f"The path uses a detour waypoint around the blocked radius, then rejoins the fastest available road corridor. "
+            f"Estimated travel is {distance_km:.1f} km and {eta_min} min."
+        )
+    return (
+        f"Optimized route from {warehouse['name']} to {shelter['name']} uses the fastest available road corridor. "
+        f"No active road block intersects this route. Estimated travel is {distance_km:.1f} km and {eta_min} min."
+    )
 
 
 def parse_discord_message(message: str) -> dict:
@@ -320,6 +349,17 @@ def parse_discord_message(message: str) -> dict:
 @app.get("/")
 async def root():
     return {"message": "Aegis Wayanad route optimizer is online", "center": WAYANAD_CENTER}
+
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "service": "route-optimizer",
+        "blocked_roads": len(state["blocked_roads"]),
+        "need_cards": len(state["need_cards"]),
+        "dispatches": len(state["dispatches"]),
+    }
 
 
 @app.get("/map-data")

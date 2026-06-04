@@ -13,13 +13,14 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 # FastAPI
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Data/Allocator layers
 from .agent import analyze_disaster, create_disaster_agent
 from .allocator import run_allocator_agent
+from .discord_adapter import analyze_discord_message
 
 # Database stores
 from .stores.incidents import create_incident, get_incident_by_id
@@ -74,8 +75,34 @@ class IncidentNewRequest(BaseModel):
     demo_mode: bool = False
 
 
+class DiscordAttachmentRequest(BaseModel):
+    url: str
+    filename: str | None = None
+    content_type: str | None = None
+    size: int | None = None
+
+
+class DiscordMessageRequest(BaseModel):
+    content: str = ""
+    username: str
+    timestamp: str
+    channel_id: str
+    channel_name: str
+    attachments: list[DiscordAttachmentRequest] = Field(default_factory=list)
+
+
 # Global state
 _current_demo_mode = False
+
+
+def is_supabase_configured() -> bool:
+    """Return whether the production Supabase store can be used."""
+    return bool(os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
+
+
+def get_effective_demo_mode() -> bool:
+    """Use demo storage when explicitly enabled or when Supabase is unavailable locally."""
+    return get_demo_mode() or not is_supabase_configured()
 
 
 def set_demo_mode(enabled: bool):
@@ -88,6 +115,13 @@ def set_demo_mode(enabled: bool):
 def get_demo_mode() -> bool:
     """Get the current demo mode state."""
     return _current_demo_mode
+
+
+def verify_discord_secret(provided_secret: str | None):
+    """Validate optional Discord listener shared secret."""
+    expected_secret = os.getenv("DISCORD_INGEST_SECRET")
+    if expected_secret and provided_secret != expected_secret:
+        raise HTTPException(status_code=401, detail="Invalid Discord ingest secret")
 
 
 # ── Lifespan 
@@ -231,7 +265,7 @@ async def get_need_cards():
     Uses the current demo_mode state set by /incident/new endpoint.
     """
     try:
-        demo_mode = get_demo_mode()
+        demo_mode = get_effective_demo_mode()
         cards = get_all_need_cards(demo_mode=demo_mode)
         logger.info(f"Fetched {len(cards)} need-cards (demo_mode={demo_mode})")
         return cards
@@ -252,7 +286,7 @@ async def decide_need_card(request: NeedCardDecisionRequest):
     }
     """
     try:
-        demo_mode = get_demo_mode()
+        demo_mode = get_effective_demo_mode()
         if request.approved:
             card = approve_need_card(request.need_card_id, demo_mode=demo_mode)
             logger.info(f"Approved need-card: {request.need_card_id}")
@@ -288,7 +322,7 @@ async def handle_take_up_need_card(request: NeedCardTakeUpRequest):
     }
     """
     try:
-        demo_mode = get_demo_mode()
+        demo_mode = get_effective_demo_mode()
         card = take_up_need_card(request.id, request.name, demo_mode=demo_mode)
         logger.info(f"Volunteer {request.name} took up need-card {request.id}")
         return {
@@ -319,10 +353,11 @@ async def process_new_incident(request: IncidentNewRequest):
     """
     try:
         incident_name = request.incident_name
-        demo_mode = request.demo_mode
+        requested_demo_mode = request.demo_mode
         
         # Set global demo mode
-        set_demo_mode(demo_mode)
+        set_demo_mode(requested_demo_mode)
+        demo_mode = get_effective_demo_mode()
         
         logger.info(f"New incident request: {incident_name} (demo_mode={demo_mode})")
 
@@ -372,6 +407,74 @@ async def process_new_incident(request: IncidentNewRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/discord/messages")
+async def ingest_discord_message(
+    request: DiscordMessageRequest,
+    x_discord_ingest_secret: str | None = Header(default=None, alias="X-Discord-Ingest-Secret"),
+):
+    """
+    POST /discord/messages
+    Ingest a Discord message captured by the standalone listener.
+
+    The message is analyzed as a direct field report. Disaster-related messages
+    are converted into verified incidents and passed through the existing
+    allocator/need-card pipeline.
+    """
+    verify_discord_secret(x_discord_ingest_secret)
+
+    payload = request.model_dump() if hasattr(request, "model_dump") else request.dict()
+    demo_mode = get_effective_demo_mode()
+    logger.info(
+        "Discord message received from #%s by %s (attachments=%d, demo_mode=%s)",
+        request.channel_name,
+        request.username,
+        len(request.attachments),
+        demo_mode,
+    )
+
+    try:
+        verified_incident = analyze_discord_message(payload)
+        if not verified_incident:
+            return {
+                "status": "ignored",
+                "reason": "message_not_classified_as_disaster",
+                "demo_mode": demo_mode,
+            }
+
+        incidents_to_process = []
+        if isinstance(verified_incident, dict):
+            if "incidents" in verified_incident:
+                incidents_to_process = verified_incident.get("incidents", [])
+            else:
+                incidents_to_process = [verified_incident]
+
+        all_results = []
+        for incident in incidents_to_process:
+            try:
+                all_results.append(process_incident(incident, demo_mode=demo_mode))
+            except Exception as e:
+                logger.error(
+                    "Failed to process Discord incident %s: %s",
+                    incident.get("incident_id"),
+                    e,
+                    exc_info=True,
+                )
+
+        return {
+            "status": "processed" if all_results else "no_incidents_processed",
+            "source": "discord",
+            "incidents_processed": len(all_results),
+            "allocation_summary": all_results,
+            "verified_incidents": incidents_to_process,
+            "demo_mode": demo_mode,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Discord message ingestion failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/health")
 async def health():
     """Health check endpoint."""
@@ -379,6 +482,8 @@ async def health():
         "status": "healthy",
         "service": "Disaster Relief Unified Backend",
         "version": "1.0.0",
+        "demo_mode_enabled": get_effective_demo_mode(),
+        "supabase_configured": is_supabase_configured(),
     }
 
 
@@ -408,7 +513,9 @@ async def get_demo_status():
     Get the current demo mode status.
     """
     return {
-        "demo_mode_enabled": get_demo_mode()
+        "demo_mode_enabled": get_effective_demo_mode(),
+        "requested_demo_mode_enabled": get_demo_mode(),
+        "supabase_configured": is_supabase_configured(),
     }
 
 
@@ -421,7 +528,7 @@ async def get_activity_feed():
     In real mode, returns empty list (not implemented for Supabase).
     """
     try:
-        demo_mode = get_demo_mode()
+        demo_mode = get_effective_demo_mode()
         
         if demo_mode:
             from .demo_db import get_activity_feed_demo

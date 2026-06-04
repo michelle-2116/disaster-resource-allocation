@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "aiohttp>=3.13.5",
+    "discord.py>=2.4.0",
     "exa-py>=2.12.1",
     "fastapi>=0.104.0",
     "feedparser>=6.0.12",
