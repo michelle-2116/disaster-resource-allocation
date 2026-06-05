@@ -9,6 +9,7 @@ import logging
 import os
 from typing import Any
 
+from postgrest.exceptions import APIError
 from supabase import create_client, Client
 
 logger = logging.getLogger("INVENTORY_STORE")
@@ -16,6 +17,23 @@ logger = logging.getLogger("INVENTORY_STORE")
 # ── Supabase client (lazy singleton) ────────────────────────────────────────
 
 _client: Client | None = None
+
+ITEM_TYPE_BY_NAME = {
+    "dry ration packets": "food",
+    "ready-to-eat meals": "food",
+    "high-energy biscuits": "food",
+    "baby food packs": "food",
+    "water pouches (500ml)": "water",
+    "water purification tabs": "water",
+    "bottled water (1L)": "water",
+    "ORS kits": "meds",
+    "first aid kits": "meds",
+    "trauma kits": "meds",
+    "anti-cholera tablets": "meds",
+    "NDRF team": "rescue_team",
+    "State rescue team": "rescue_team",
+    "Boat rescue unit": "rescue_team",
+}
 
 
 def _get_client() -> Client:
@@ -27,6 +45,48 @@ def _get_client() -> Client:
     return _client
 
 
+def _infer_item_type(item_name: str) -> str:
+    """Best-effort type inference for legacy inventory schemas."""
+    explicit_type = ITEM_TYPE_BY_NAME.get(item_name)
+    if explicit_type:
+        return explicit_type
+
+    normalized = item_name.lower()
+    if any(token in normalized for token in ("water", "purification")):
+        return "water"
+    if any(token in normalized for token in ("ors", "aid", "kit", "tablet", "med", "trauma")):
+        return "meds"
+    if any(token in normalized for token in ("team", "rescue", "ndrf", "boat")):
+        return "rescue_team"
+    return "food"
+
+
+def _missing_item_type_column(error: APIError) -> bool:
+    payload = getattr(error, "args", ())
+    message = str(error)
+    return ("42703" in message and "inventory.item_type" in message) or (
+        bool(payload)
+        and isinstance(payload[0], dict)
+        and payload[0].get("code") == "42703"
+        and "inventory.item_type" in str(payload[0].get("message", ""))
+    )
+
+
+def _normalize_inventory_row(row: dict[str, Any]) -> dict[str, Any]:
+    item_name = str(row.get("item_name") or "")
+    available_quantity = row.get("available_quantity")
+    if available_quantity is None:
+        available_quantity = row.get("quantity", 0)
+
+    return {
+        **row,
+        "item_type": row.get("item_type") or _infer_item_type(item_name),
+        "item_name": item_name,
+        "available_quantity": int(available_quantity or 0),
+        "location": row.get("location") or row.get("shelter_id") or "Unknown",
+    }
+
+
 # ── Public interface ────────────────────────────────────────────────────────
 
 def fetch_inventory() -> list[dict[str, Any]]:
@@ -35,13 +95,28 @@ def fetch_inventory() -> list[dict[str, Any]]:
     Each row: {id, item_type, item_name, available_quantity, location, updated_at}
     """
     client = _get_client()
-    response = (
-        client.table("inventory")
-        .select("id, item_type, item_name, available_quantity, location")
-        .order("item_type")
-        .order("item_name")
-        .execute()
-    )
+    try:
+        response = (
+            client.table("inventory")
+            .select("id, item_type, item_name, available_quantity, location")
+            .order("item_type")
+            .order("item_name")
+            .execute()
+        )
+    except APIError as error:
+        if not _missing_item_type_column(error):
+            raise
+
+        logger.warning(
+            "inventory.item_type column is missing; using legacy inventory "
+            "fallback. Apply migrations/005_fix_inventory_schema.sql."
+        )
+        response = client.table("inventory").select("*").execute()
+        rows = [_normalize_inventory_row(row) for row in response.data or []]
+        rows.sort(key=lambda row: (row.get("item_type", ""), row.get("item_name", "")))
+        logger.debug("Fetched %d legacy inventory rows from Supabase", len(rows))
+        return rows
+
     rows: list[dict] = response.data or []
     logger.debug("Fetched %d inventory rows from Supabase", len(rows))
     return rows
@@ -83,7 +158,7 @@ def _deduct_fallback(client: Client, item_name: str, quantity: int) -> bool:
     """
     rows = (
         client.table("inventory")
-        .select("id, available_quantity")
+        .select("*")
         .eq("item_name", item_name)
         .execute()
         .data
@@ -94,7 +169,12 @@ def _deduct_fallback(client: Client, item_name: str, quantity: int) -> bool:
         return False
 
     row = rows[0]
-    current: int = row["available_quantity"]
+    quantity_column = "available_quantity" if "available_quantity" in row else "quantity"
+    if quantity_column not in row:
+        logger.error("Inventory quantity column not found for '%s'", item_name)
+        return False
+
+    current: int = int(row[quantity_column] or 0)
 
     if current < quantity:
         logger.error(
@@ -105,7 +185,7 @@ def _deduct_fallback(client: Client, item_name: str, quantity: int) -> bool:
 
     try:
         client.table("inventory").update(
-            {"available_quantity": current - quantity}
+            {quantity_column: current - quantity}
         ).eq("id", row["id"]).execute()
         logger.info("Deducted %d units of '%s'", quantity, item_name)
         return True
