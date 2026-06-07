@@ -114,29 +114,43 @@ class DisasterDiscordClient(discord.Client):
             logger.debug("Ignoring message from unconfigured channel %s", message.channel.id)
             return
 
-        payload = _message_payload(message)
-        await self._send_to_backend(payload)
+        content_lower = message.content.lower()
+        roadblock_keywords = ["blocked", "landslide", "washout", "closed"]
+        is_roadblock = any(kw in content_lower for kw in roadblock_keywords)
 
-    async def _send_to_backend(self, payload: dict[str, Any]) -> None:
+        if is_roadblock:
+            routeo_url = os.getenv("DISCORD_ROUTEO_BACKEND_URL", "http://127.0.0.1:8001/discord/road-report")
+            payload = {
+                "message": message.content,
+                "author": str(message.author),
+            }
+            logger.info("Routing roadblock report to Route-Optimizer: %s", message.content)
+            await self._send_to_url(routeo_url, payload, use_secret=False)
+        else:
+            payload = _message_payload(message)
+            logger.info("Routing resource need/incident to DataIngestion: %s", message.content)
+            await self._send_to_url(self.backend_url, payload, use_secret=True)
+
+    async def _send_to_url(self, url: str, payload: dict[str, Any], use_secret: bool = True) -> None:
         if self.session is None:
             raise RuntimeError("HTTP session is not initialized")
 
         headers = {"Content-Type": "application/json"}
-        if self.ingest_secret:
+        if use_secret and self.ingest_secret:
             headers["X-Discord-Ingest-Secret"] = self.ingest_secret
 
         for attempt in range(1, self.retries + 1):
             try:
                 async with self.session.post(
-                    self.backend_url,
+                    url,
                     json=payload,
                     headers=headers,
                 ) as response:
                     body = await response.text()
                     if 200 <= response.status < 300:
                         logger.info(
-                            "Forwarded Discord message from #%s; backend status=%s",
-                            payload.get("channel_name"),
+                            "Forwarded Discord message to %s; backend status=%s",
+                            url,
                             response.status,
                         )
                         return
@@ -166,10 +180,9 @@ class DisasterDiscordClient(discord.Client):
                 await asyncio.sleep(2 ** (attempt - 1))
 
         logger.error(
-            "Failed to forward Discord message after %d attempt(s): channel=%s username=%s",
+            "Failed to forward Discord message after %d attempt(s) to URL: %s",
             self.retries,
-            payload.get("channel_name"),
-            payload.get("username"),
+            url,
         )
 
 

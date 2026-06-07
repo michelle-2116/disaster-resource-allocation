@@ -49,6 +49,8 @@ function App() {
 
   useEffect(() => {
     loadAll();
+    const interval = setInterval(loadAll, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const pendingNeeds = useMemo(

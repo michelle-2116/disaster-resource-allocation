@@ -488,7 +488,7 @@ async def health():
 
 
 @app.post("/demo/reset")
-async def reset_demo():
+async def reset_demo(cascade: bool = True):
     """
     POST /demo/reset
     Reset the demo database to initial state (clears all data).
@@ -497,9 +497,43 @@ async def reset_demo():
         from .demo_db import reset_demo_db
         reset_demo_db()
         logger.info("Demo database reset via API")
+        
+        # Trigger Route-Optimizer system reset if cascade is True
+        if cascade:
+            import urllib.request
+            try:
+                req = urllib.request.Request(
+                    "http://127.0.0.1:8001/system/reset?cascade=false",
+                    method="POST",
+                    headers={"Content-Type": "application/json"}
+                )
+                with urllib.request.urlopen(req, timeout=3) as response:
+                    pass
+            except Exception as e:
+                logger.warning(f"Could not ping Route-Optimizer reset: {e}")
+
+        # Also clear Supabase if configured
+        if is_supabase_configured():
+            try:
+                from .stores.need_cards import _get_client
+                supabase = _get_client()
+                # Delete dispatches first
+                supabase.table("dispatches").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+                # Delete blocked roads
+                supabase.table("blocked_roads").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+                # Delete need_cards
+                supabase.table("need_cards").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+                # Delete incidents
+                supabase.table("incidents").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+                # Reset inventory in Supabase
+                supabase.table("inventory").update({"quantity": 10000, "available_quantity": 10000}).neq("id", "00000000-0000-0000-0000-000000000000").execute()
+                logger.info("Supabase database cleared and inventory reset via DataIngestion reset API")
+            except Exception as e:
+                logger.error(f"Failed to clear Supabase database from DataIngestion reset: {e}")
+
         return {
             "status": "reset_complete",
-            "message": "Demo database has been reset"
+            "message": "Demo and database reset complete"
         }
     except Exception as e:
         logger.error(f"Failed to reset demo database: {e}")

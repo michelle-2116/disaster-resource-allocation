@@ -7,10 +7,10 @@ import os
 
 # ── HITL gate thresholds ────────────────────────────────────────────────────
 APPROVAL_THRESHOLDS: dict[str, int] = {
-    "food":        int(os.getenv("APPROVAL_THRESHOLD_FOOD",         5000)),
-    "water":       int(os.getenv("APPROVAL_THRESHOLD_WATER",       10000)),
-    "meds":        int(os.getenv("APPROVAL_THRESHOLD_MEDS",          500)),
-    "rescue_team": int(os.getenv("APPROVAL_THRESHOLD_RESCUE_TEAM",     5)),
+    "food":        int(os.getenv("APPROVAL_THRESHOLD_FOOD",         2000)),
+    "water":       int(os.getenv("APPROVAL_THRESHOLD_WATER",        2000)),
+    "meds":        int(os.getenv("APPROVAL_THRESHOLD_MEDS",         2000)),
+    "rescue_team": int(os.getenv("APPROVAL_THRESHOLD_RESCUE_TEAM",  2000)),
 }
 
 # ── Gemini model ────────────────────────────────────────────────────────────
