@@ -4,6 +4,7 @@ import { getIncident, initDemoMode } from './services/api';
 
 import PublicLayout from './layouts/PublicLayout';
 import AdminLayout from './layouts/AdminLayout';
+import VolunteerLayout from './layouts/VolunteerLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ToastProvider } from './components/ToastProvider';
 
@@ -11,6 +12,7 @@ import IncidentSetupPage from './pages/IncidentSetupPage';
 import PublicDashboard from './pages/PublicDashboard';
 import ContributePage from './pages/ContributePage';
 import AdminDashboard from './pages/AdminDashboard';
+import VolunteerDashboard from './pages/VolunteerDashboard';
 import NewIncidentPage from './pages/NewIncidentPage';
 import AuditLogPage from './pages/AuditLogPage';
 import AdminLogin from './pages/AdminLogin';
@@ -51,16 +53,26 @@ function App() {
             <Route path="/contribute/:needCardId" element={<ContributePage />} />
           </Route>
 
-          {/* Admin Login Route */}
-          <Route path="/admin/login" element={<AdminLogin />} />
+          {/* Unified Login Routes */}
+          <Route path="/login" element={<AdminLogin />} />
+          <Route path="/admin/login" element={<Navigate to="/login" replace />} />
 
           {/* Protected Admin Routes */}
-          <Route path="/admin" element={<ProtectedRoute />}>
+          <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']} />}>
             <Route element={<AdminLayout />}>
-              <Route index element={<AdminDashboard />} />
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<AdminDashboard />} />
               <Route path="new-incident" element={<NewIncidentPage />} />
               {/* Placeholder routes for layout links */}
               <Route path="audit-log" element={<AuditLogPage />} />
+            </Route>
+          </Route>
+
+          {/* Protected Volunteer Routes */}
+          <Route path="/volunteer" element={<ProtectedRoute allowedRoles={['volunteer']} />}>
+            <Route element={<VolunteerLayout />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<VolunteerDashboard />} />
             </Route>
           </Route>
 
@@ -73,3 +85,4 @@ function App() {
 }
 
 export default App;
+
