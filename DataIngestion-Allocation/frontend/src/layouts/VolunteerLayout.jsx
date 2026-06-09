@@ -1,43 +1,29 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { Menu, X, LayoutDashboard, History, Map } from 'lucide-react';
-import { SystemStatusPanel } from '../components';
+import { Menu, X, LayoutDashboard, Globe } from 'lucide-react';
 import { api } from '../services/api';
 
-export default function AdminLayout() {
+export default function VolunteerLayout() {
   const navigate = useNavigate();
-  const [stats, setStats] = useState({ pending: 0, open: 0 });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [volunteerName, setVolunteerName] = useState('Volunteer');
 
   useEffect(() => {
-    const fetchStats = async () => {
-      const [pendingRes, publicRes] = await Promise.all([
-        api.getPendingApprovalCards(),
-        api.getPublicNeedCards()
-      ]);
-      setStats({
-        pending: pendingRes.data?.length || 0,
-        open: publicRes.data?.length || 0
-      });
-    };
-    fetchStats();
-    
-    const interval = setInterval(fetchStats, 10000);
-    return () => clearInterval(interval);
+    const name = localStorage.getItem('volunteer_name') || 'Volunteer';
+    setVolunteerName(name);
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('aria_pin');
     localStorage.removeItem('user_role');
     localStorage.removeItem('relief_auth');
+    localStorage.removeItem('volunteer_name');
     navigate('/login');
   };
 
-
   const navLinks = [
-    { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
-    { to: '/admin/map', label: 'Logistics Map', icon: Map },
-    { to: '/admin/audit-log', label: 'Audit Log', icon: History },
+    { to: '/volunteer/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
+    { to: '/', label: 'Public Portal', icon: Globe },
   ];
 
   return (
@@ -64,7 +50,7 @@ export default function AdminLayout() {
             </div>
             <div className="md:hidden lg:block whitespace-nowrap overflow-hidden">
               <h1 className="font-bold tracking-wider text-white leading-tight">RELIEFGRID</h1>
-              <p className="text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5">Admin Console</p>
+              <p className="text-[10px] text-gray-400 font-mono uppercase tracking-widest mt-0.5">Volunteer Console</p>
             </div>
           </div>
           <button 
@@ -94,19 +80,16 @@ export default function AdminLayout() {
           ))}
         </nav>
 
-        {/* System Status Widget (Hidden on tablet icon-only view) */}
-        <div className="p-4 border-t border-gray-800 md:hidden lg:block">
-          <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">System Status</h3>
-          <SystemStatusPanel 
-            pendingCount={stats.pending} 
-            openNeedsCount={stats.open} 
-          />
+        {/* Bottom Banner */}
+        <div className="p-4 border-t border-gray-800 md:hidden lg:block text-xs text-gray-500 font-mono">
+          <p>ReliefGrid Volunteer Network</p>
+          <p className="mt-1">v1.0.0</p>
         </div>
       </aside>
 
       {/* Main Content Area */}
       <main className="flex-grow flex flex-col h-screen overflow-hidden min-w-0">
-        {/* Admin Topbar */}
+        {/* Topbar */}
         <header className="h-14 bg-bg-card border-b border-border flex items-center justify-between px-4 sm:px-6 shrink-0 shadow-sm relative z-30">
           <div className="flex items-center gap-3">
             <button 
@@ -115,15 +98,15 @@ export default function AdminLayout() {
             >
               <Menu size={20} />
             </button>
-            <span className="text-sm font-bold text-text-primary tracking-tight hidden sm:inline">ReliefGrid Operations Console</span>
-            <span className="text-sm font-bold text-text-primary tracking-tight sm:hidden">ReliefGrid Admin</span>
-            <span className="px-2 py-0.5 bg-accent-red/10 text-accent-red rounded text-[10px] font-bold uppercase tracking-wider font-mono hidden sm:inline">Live Env</span>
+            <span className="text-sm font-bold text-text-primary tracking-tight hidden sm:inline">ReliefGrid Volunteer Portal</span>
+            <span className="text-sm font-bold text-text-primary tracking-tight sm:hidden">ReliefGrid Volunteer</span>
+            <span className="px-2 py-0.5 bg-accent-green/10 text-accent-green rounded text-[10px] font-bold uppercase tracking-wider font-mono hidden sm:inline">Active</span>
           </div>
           
           <div className="flex items-center gap-4 sm:gap-6">
             <div className="text-sm hidden sm:block">
-              <span className="text-text-muted mr-2">Admin:</span>
-              <span className="font-bold font-mono text-text-primary">System Auth</span>
+              <span className="text-text-muted mr-2">Volunteer:</span>
+              <span className="font-bold font-mono text-text-primary">{volunteerName}</span>
             </div>
             <button 
               onClick={handleLogout}

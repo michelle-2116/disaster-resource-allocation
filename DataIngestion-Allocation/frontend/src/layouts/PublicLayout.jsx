@@ -21,9 +21,10 @@ export default function PublicLayout() {
           <div className="hidden sm:block">
             <LivePulse />
           </div>
-          <Link to="/admin/login" className="px-4 py-2 bg-transparent text-text-primary border border-border rounded font-medium hover:bg-bg-secondary transition-colors text-sm">
-            Admin &rarr;
+          <Link to="/login" className="px-4 py-2 bg-transparent text-text-primary border border-border rounded font-medium hover:bg-bg-secondary transition-colors text-sm">
+            Login &rarr;
           </Link>
+
         </nav>
       </header>
       
