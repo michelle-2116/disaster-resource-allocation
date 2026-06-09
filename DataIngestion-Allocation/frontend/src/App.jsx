@@ -15,6 +15,7 @@ import NewIncidentPage from './pages/NewIncidentPage';
 import AuditLogPage from './pages/AuditLogPage';
 import AdminLogin from './pages/AdminLogin';
 import NotFound from './pages/NotFound';
+import LogisticsMap from './pages/LogisticsMap';
 
 // Protected wrapper that checks for incident
 function IncidentProtectedRoute({ children }) {
@@ -59,6 +60,7 @@ function App() {
             <Route element={<AdminLayout />}>
               <Route index element={<AdminDashboard />} />
               <Route path="new-incident" element={<NewIncidentPage />} />
+              <Route path="map" element={<LogisticsMap />} />
               {/* Placeholder routes for layout links */}
               <Route path="audit-log" element={<AuditLogPage />} />
             </Route>

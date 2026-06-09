@@ -4,6 +4,9 @@ import math
 import re
 from copy import deepcopy
 from uuid import uuid4
+import logging
+
+logger = logging.getLogger("api")
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -230,6 +233,34 @@ def map_severity(severity_val: int | None) -> str:
         return "low"
 
 
+def resolve_warehouse_id(row: dict) -> str:
+    loc = row.get("location") or ""
+    if not loc or loc.lower() == "unknown":
+        loc = row.get("shelter_id") or ""
+        
+    loc_lower = str(loc).lower()
+    if "kalpetta" in loc_lower or "delhi" in loc_lower:
+        return "wh-kalpetta"
+    elif "bathery" in loc_lower or "lucknow" in loc_lower:
+        return "wh-sulthan-bathery"
+    elif "manathavady" in loc_lower or "patna" in loc_lower or "mananthavady" in loc_lower:
+        return "wh-manathavady"
+    else:
+        # UUID mapping from shelters
+        if loc == "00000000-0000-0000-0000-000000000000":
+            return "wh-kalpetta"
+        elif loc == "e50c8408-f7c0-42f6-9c9b-1ed6747494e6":
+            return "wh-sulthan-bathery"
+        elif loc == "eee9ab04-1e8d-4438-9174-faa2e724bb6a":
+            return "wh-manathavady"
+        elif loc == "3a618815-5a0d-476f-8904-0a51252d3e4b":
+            return "wh-kalpetta"
+        elif loc == "4f38aacd-98c0-456e-b314-cbc73d556876":
+            return "wh-sulthan-bathery"
+        else:
+            return "wh-kalpetta"
+
+
 def get_live_warehouses(supabase_client) -> list:
     warehouses = deepcopy(WAREHOUSES)
     if not supabase_client:
@@ -237,23 +268,26 @@ def get_live_warehouses(supabase_client) -> list:
     try:
         res = supabase_client.table("inventory").select("*").execute()
         rows = res.data or []
-        stock_by_item = {}
+        stock_by_loc_item = {}
         for row in rows:
             qty_val = row.get("available_quantity")
             if qty_val is None:
                 qty_val = row.get("quantity", 0)
             qty = int(qty_val or 0)
             canonical_item = resolve_item_type(row.get("item_name") or "")
-            stock_by_item[canonical_item] = stock_by_item.get(canonical_item, 0) + qty
+            
+            wh_id = resolve_warehouse_id(row)
+            key = (wh_id, canonical_item)
+            stock_by_loc_item[key] = stock_by_loc_item.get(key, 0) + qty
             
         for w in warehouses:
-            pct = 0.5 if "kalpetta" in w["id"] else (0.3 if "bathery" in w["id"] else 0.2)
             for res_item in w["resources"]:
                 canonical = resolve_item_type(res_item["item_name"])
-                if canonical in stock_by_item:
-                    res_item["quantity"] = int(stock_by_item[canonical] * pct)
-    except Exception:
-        pass
+                key = (w["id"], canonical)
+                if key in stock_by_loc_item:
+                    res_item["quantity"] = stock_by_loc_item[key]
+    except Exception as e:
+        logger.error(f"Error in get_live_warehouses: {e}", exc_info=True)
     return warehouses
 
 
@@ -266,31 +300,56 @@ def choose_warehouse_live(shelter: dict, item_name: str, qty: float, warehouses_
     return sorted(candidates, key=lambda w: distance_km(w, shelter))[0]
 
 
-def deduct_inventory_supabase(item_name: str, quantity: int) -> bool:
+def deduct_inventory_supabase(item_name: str, quantity: int, warehouse_id: str = None) -> bool:
     if not supabase:
         return False
     try:
-        result = supabase.rpc(
-            "deduct_inventory_quantity",
-            {"p_item_name": item_name, "p_quantity": quantity},
-        ).execute()
-        if result.data and isinstance(result.data, list):
-            return bool(result.data[0].get("success", False))
-        return False
-    except Exception:
-        try:
-            rows = supabase.table("inventory").select("*").eq("item_name", item_name).execute().data
-            if not rows:
-                return False
-            row = rows[0]
+        res = supabase.table("inventory").select("*").execute()
+        rows = res.data or []
+        
+        canonical_target = resolve_item_type(item_name)
+        matching_rows = []
+        for row in rows:
+            row_item_name = row.get("item_name") or ""
+            if resolve_item_type(row_item_name) == canonical_target or row_item_name == item_name:
+                wh_id = resolve_warehouse_id(row)
+                if wh_id == warehouse_id or not warehouse_id:
+                    matching_rows.append(row)
+                    
+        if not matching_rows:
+            return False
+            
+        # Pre-check: Verify total available stock across all matching rows
+        total_available = 0
+        for row in matching_rows:
+            quantity_column = "available_quantity" if "available_quantity" in row else "quantity"
+            total_available += int(row.get(quantity_column, 0) or 0)
+        if total_available < quantity:
+            return False
+            
+        # Deduct from the first matching row that has sufficient quantity
+        for row in matching_rows:
             quantity_column = "available_quantity" if "available_quantity" in row else "quantity"
             current = int(row.get(quantity_column, 0) or 0)
-            if current < quantity:
-                return False
-            supabase.table("inventory").update({quantity_column: current - quantity}).eq("id", row["id"]).execute()
-            return True
-        except Exception:
-            return False
+            if current >= quantity:
+                supabase.table("inventory").update({quantity_column: current - quantity}).eq("id", row["id"]).execute()
+                return True
+                
+        # If no single row has enough, try to deduct partially from matching rows
+        for row in matching_rows:
+            quantity_column = "available_quantity" if "available_quantity" in row else "quantity"
+            current = int(row.get(quantity_column, 0) or 0)
+            if current > 0:
+                deduct_qty = min(quantity, current)
+                supabase.table("inventory").update({quantity_column: current - deduct_qty}).eq("id", row["id"]).execute()
+                quantity -= deduct_qty
+                if quantity <= 0:
+                    return True
+                    
+        return False
+    except Exception as e:
+        logger.error(f"Error in deduct_inventory_supabase: {e}", exc_info=True)
+        return False
 
 
 async def rebuild_live_dispatches() -> None:
@@ -791,18 +850,11 @@ async def approve_allocation(need_id: str):
             explanation = route_explanation(route, warehouse, shelter)
             
             db_item_name = row.get("item") or item_type
-            deducted = deduct_inventory_supabase(db_item_name, int(qty))
-            if not deducted:
-                inv_res = supabase.table("inventory").select("*").execute()
-                for inv_row in (inv_res.data or []):
-                    if resolve_item_type(inv_row.get("item_name") or "") == item_type:
-                        if deduct_inventory_supabase(inv_row["item_name"], int(qty)):
-                            deducted = True
-                            break
+            deducted = deduct_inventory_supabase(db_item_name, int(qty), warehouse_id=warehouse["id"])
                             
             supabase.table("need_cards").update({"fulfilled": True, "done_by": "Route Optimizer"}).eq("id", need_id).execute()
             
-            dispatch_id = f"dispatch-{uuid4()}"
+            dispatch_id = str(uuid4())
             dispatch_row = {
                 "id": dispatch_id,
                 "need_card_id": need_id,

@@ -216,7 +216,7 @@ make status
 
 ## How to Run the Integrated System
 
-To run all services, open **5 separate terminals** and run the following commands:
+To run all services, open **4 separate terminals** and run the following commands:
 
 1. **Terminal 1: Data Ingestion Backend (Port 8000)**
    ```powershell
@@ -225,7 +225,7 @@ To run all services, open **5 separate terminals** and run the following command
    uvicorn src.api:app --port 8000
    ```
 
-2. **Terminal 2: Data Ingestion Frontend (Port 5173)**
+2. **Terminal 2: Unified Frontend Console (Port 5173)**
    ```powershell
    cd DataIngestion-Allocation/frontend
    npm run dev
@@ -238,13 +238,7 @@ To run all services, open **5 separate terminals** and run the following command
    uvicorn main:app --port 8001
    ```
 
-4. **Terminal 4: Route Optimizer Frontend (Port 5174)**
-   ```powershell
-   cd Route-Optimizer/frontend
-   npm run dev
-   ```
-
-5. **Terminal 5: Discord Ingestion Bot**
+4. **Terminal 4: Discord Ingestion Bot**
    ```powershell
    conda activate witch
    cd DataIngestion-Allocation/backend
