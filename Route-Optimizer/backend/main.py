@@ -74,6 +74,8 @@ WAREHOUSES = [
     },
 ]
 
+DEFAULT_WAREHOUSES = deepcopy(WAREHOUSES)
+
 SHELTERS = [
     {"id": "sh-meppadi", "name": "Meppadi GHSS Relief Camp", "capacity": 950, "current_occupancy": 720, "lat": 11.5577, "lng": 76.1411, "risk": "landslide and flood isolation"},
     {"id": "sh-vythiri", "name": "Vythiri Community Hall", "capacity": 520, "current_occupancy": 410, "lat": 11.5487, "lng": 76.0364, "risk": "hill road washout"},
@@ -947,6 +949,64 @@ async def ingest_discord_report(payload: DiscordInput):
     return await add_blocked_road(block)
 
 
+class InventoryUpdateInput(BaseModel):
+    quantity: int
+
+
+@app.patch("/inventory/{warehouse_id}/{item_name}")
+async def update_inventory(warehouse_id: str, item_name: str, payload: InventoryUpdateInput):
+    """Admin endpoint: set the quantity for a specific item in a specific warehouse."""
+    if payload.quantity < 0:
+        raise HTTPException(status_code=400, detail="Quantity cannot be negative")
+
+    # 1. Update in-memory WAREHOUSES state
+    wh = next((w for w in WAREHOUSES if w["id"] == warehouse_id), None)
+    if not wh:
+        raise HTTPException(status_code=404, detail=f"Warehouse '{warehouse_id}' not found")
+
+    resource = next((r for r in wh["resources"] if r["item_name"] == item_name), None)
+    if not resource:
+        raise HTTPException(status_code=404, detail=f"Item '{item_name}' not found in warehouse '{warehouse_id}'")
+
+    old_qty = resource["quantity"]
+    resource["quantity"] = payload.quantity
+
+    # 2. Persist to Supabase if connected
+    if supabase:
+        try:
+            canonical = resolve_item_type(item_name)
+            res = supabase.table("inventory").select("*").execute()
+            matching_rows = []
+            for row in (res.data or []):
+                row_canonical = resolve_item_type(row.get("item_name") or "")
+                row_wh = resolve_warehouse_id(row)
+                if row_canonical == canonical and row_wh == warehouse_id:
+                    matching_rows.append(row)
+            
+            if matching_rows:
+                num_rows = len(matching_rows)
+                base_qty = payload.quantity // num_rows
+                remainder = payload.quantity % num_rows
+                
+                for i, row in enumerate(matching_rows):
+                    qty_col = "available_quantity" if "available_quantity" in row else "quantity"
+                    qty_to_set = base_qty + (1 if i < remainder else 0)
+                    supabase.table("inventory").update({
+                        qty_col: qty_to_set,
+                        "quantity": qty_to_set
+                    }).eq("id", row["id"]).execute()
+        except Exception as e:
+            logger.warning(f"Supabase inventory sync failed (in-memory still updated): {e}")
+
+    return {
+        "status": "updated",
+        "warehouse_id": warehouse_id,
+        "item_name": item_name,
+        "old_quantity": old_qty,
+        "new_quantity": payload.quantity,
+    }
+
+
 @app.post("/system/reset")
 async def reset_system(cascade: bool = True):
     import urllib.request
@@ -954,6 +1014,11 @@ async def reset_system(cascade: bool = True):
     state["blocked_roads"] = []
     state["need_cards"] = []
     state["dispatches"] = []
+    
+    # Reset WAREHOUSES in-memory to original defaults
+    WAREHOUSES.clear()
+    for w in deepcopy(DEFAULT_WAREHOUSES):
+        WAREHOUSES.append(w)
     
     # Trigger DataIngestion demo reset if it's active and cascade is True
     if cascade:
@@ -978,9 +1043,42 @@ async def reset_system(cascade: bool = True):
             supabase.table("need_cards").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
             # Delete incidents
             supabase.table("incidents").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
-            # Reset inventory in Supabase
-            supabase.table("inventory").update({"quantity": 10000, "available_quantity": 10000}).neq("id", "00000000-0000-0000-0000-000000000000").execute()
-        except Exception:
-            pass
+            
+            # Reset inventory in Supabase by distributing DEFAULT_WAREHOUSES quantities
+            res = supabase.table("inventory").select("*").execute()
+            rows = res.data or []
+            
+            # Group row IDs by (warehouse_id, canonical_item)
+            groups = {}
+            for row in rows:
+                row_wh = resolve_warehouse_id(row)
+                row_canonical = resolve_item_type(row.get("item_name") or "")
+                key = (row_wh, row_canonical)
+                if key not in groups:
+                    groups[key] = []
+                groups[key].append(row)
+                
+            # For each group, find the default quantity and distribute it
+            for (wh_id, canonical), group_rows in groups.items():
+                default_qty = 10000
+                wh_default = next((w for w in DEFAULT_WAREHOUSES if w["id"] == wh_id), None)
+                if wh_default:
+                    res_default = next((r for r in wh_default["resources"] if resolve_item_type(r["item_name"]) == canonical), None)
+                    if res_default:
+                        default_qty = res_default["quantity"]
+                
+                num_rows = len(group_rows)
+                base_qty = default_qty // num_rows
+                remainder = default_qty % num_rows
+                
+                for i, row in enumerate(group_rows):
+                    qty_col = "available_quantity" if "available_quantity" in row else "quantity"
+                    qty_to_set = base_qty + (1 if i < remainder else 0)
+                    supabase.table("inventory").update({
+                        qty_col: qty_to_set,
+                        "quantity": qty_to_set
+                    }).eq("id", row["id"]).execute()
+        except Exception as e:
+            logger.error(f"Failed to reset Supabase inventory: {e}", exc_info=True)
             
     return {"status": "success"}

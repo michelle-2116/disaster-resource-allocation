@@ -6,9 +6,12 @@ import { useToast } from '../components/ToastProvider';
 import {
   AlertTriangle,
   CheckCircle,
+  ChevronDown,
+  ChevronUp,
   CircleSlash,
   MessageSquareWarning,
   Package,
+  Pencil,
   RefreshCcw,
   Route,
   ShieldAlert,
@@ -48,7 +51,10 @@ export default function LogisticsMap() {
   const [discordMessage, setDiscordMessage] = useState(quickReports[0]);
   const [loading, setLoading] = useState(false);
   const [lastAction, setLastAction] = useState('');
-  const [activeControlTab, setActiveControlTab] = useState('roadblocks'); // 'roadblocks' or 'warehouses'
+  const [activeControlTab, setActiveControlTab] = useState('warehouses'); // 'roadblocks' or 'warehouses'
+  const [editingWarehouse, setEditingWarehouse] = useState(null); // warehouse id being edited
+  const [draftQuantities, setDraftQuantities] = useState({}); // { item_name: qty }
+  const [savingInventory, setSavingInventory] = useState(false);
 
   const loadAll = useCallback(async () => {
     try {
@@ -149,6 +155,24 @@ export default function LogisticsMap() {
       }
     }
   }, [loadAll, showToast]);
+
+  const handleSaveInventory = useCallback(async (warehouseId) => {
+    setSavingInventory(true);
+    try {
+      const promises = Object.entries(draftQuantities).map(([itemName, qty]) =>
+        axios.patch(`${API_BASE}/inventory/${warehouseId}/${encodeURIComponent(itemName)}`, { quantity: qty })
+      );
+      await Promise.all(promises);
+      showToast('Inventory updated successfully!', 'success');
+      setEditingWarehouse(null);
+      setDraftQuantities({});
+      await loadAll();
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to update inventory', 'error');
+    } finally {
+      setSavingInventory(false);
+    }
+  }, [draftQuantities, loadAll, showToast]);
 
   return (
     <div className="relative space-y-6">
@@ -441,22 +465,117 @@ export default function LogisticsMap() {
               </div>
               <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
                 {data.warehouses?.map((warehouse) => (
-                  <div key={warehouse.id} className="border border-border bg-bg-secondary/40 p-3 rounded-lg">
+                  <div
+                    key={warehouse.id}
+                    className={`border p-3 rounded-lg transition-all duration-200 ${
+                      editingWarehouse === warehouse.id
+                        ? 'border-accent-blue bg-accent-blue/5 shadow-md'
+                        : 'border-border bg-bg-secondary/40'
+                    }`}
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-bold text-text-primary">{warehouse.name}</p>
                         <p className="text-[10px] text-text-muted mt-0.5">Route Access: {warehouse.access}</p>
                       </div>
-                      <span className="text-[9px] bg-accent-blue/10 text-accent-blue px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">{warehouse.type.replace('_', ' ')}</span>
+                      <div className="flex items-center gap-2">
+                        {editingWarehouse === warehouse.id ? (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleSaveInventory(warehouse.id)}
+                              disabled={savingInventory}
+                              className="px-2 py-0.5 bg-accent-blue text-white text-[10px] font-bold rounded hover:bg-accent-blue-light transition-colors disabled:opacity-50"
+                            >
+                              {savingInventory ? 'Saving...' : 'Save'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingWarehouse(null);
+                                setDraftQuantities({});
+                              }}
+                              disabled={savingInventory}
+                              className="px-2 py-0.5 bg-bg-card border border-border text-text-secondary text-[10px] font-bold rounded hover:bg-bg-secondary transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setEditingWarehouse(warehouse.id);
+                              const drafts = {};
+                              warehouse.resources.forEach((r) => {
+                                drafts[r.item_name] = r.quantity;
+                              });
+                              setDraftQuantities(drafts);
+                            }}
+                            className="p-1 hover:bg-bg-secondary rounded text-text-secondary hover:text-accent-blue transition-colors"
+                            title="Edit warehouse inventory"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                        )}
+                        <span className="text-[9px] bg-accent-blue/10 text-accent-blue px-2 py-0.5 rounded-full uppercase font-bold tracking-wider shrink-0">
+                          {warehouse.type.replace('_', ' ')}
+                        </span>
+                      </div>
                     </div>
                     <div className="mt-2.5 grid grid-cols-2 gap-2">
                       {warehouse.resources.map((item) => (
-                        <div key={item.item_name} className="bg-bg-card border border-border p-2 rounded">
+                        <div
+                          key={item.item_name}
+                          className={`bg-bg-card border p-2 rounded transition-colors ${
+                            editingWarehouse === warehouse.id ? 'border-accent-blue/30' : 'border-border'
+                          }`}
+                        >
                           <div className="flex items-center justify-between gap-1.5">
                             <span className="text-[11px] text-text-secondary truncate">{item.item_name}</span>
-                            <span className="text-xs font-mono font-bold text-text-primary">{item.quantity}</span>
+                            {editingWarehouse === warehouse.id ? (
+                              <div className="flex items-center gap-0.5">
+                                <button
+                                  onClick={() =>
+                                    setDraftQuantities((prev) => ({
+                                      ...prev,
+                                      [item.item_name]: Math.max(0, (prev[item.item_name] ?? item.quantity) - 100)
+                                    }))
+                                  }
+                                  className="w-5 h-5 flex items-center justify-center rounded text-text-secondary hover:text-accent-red hover:bg-accent-red/10 transition-colors text-xs font-bold"
+                                  title="Decrease by 100"
+                                >
+                                  <ChevronDown size={12} />
+                                </button>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={draftQuantities[item.item_name] ?? item.quantity}
+                                  onChange={(e) =>
+                                    setDraftQuantities((prev) => ({
+                                      ...prev,
+                                      [item.item_name]: Math.max(0, parseInt(e.target.value) || 0)
+                                    }))
+                                  }
+                                  className="w-14 text-center text-xs font-mono font-bold bg-bg-secondary border border-border rounded px-1 py-0.5 outline-none focus:border-accent-blue text-text-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                />
+                                <button
+                                  onClick={() =>
+                                    setDraftQuantities((prev) => ({
+                                      ...prev,
+                                      [item.item_name]: (prev[item.item_name] ?? item.quantity) + 100
+                                    }))
+                                  }
+                                  className="w-5 h-5 flex items-center justify-center rounded text-text-secondary hover:text-accent-green hover:bg-accent-green/10 transition-colors text-xs font-bold"
+                                  title="Increase by 100"
+                                >
+                                  <ChevronUp size={12} />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-xs font-mono font-bold text-text-primary">{item.quantity}</span>
+                            )}
                           </div>
-                          <p className="text-[9px] text-text-muted mt-0.5">{item.unit} | {item.priority}</p>
+                          <p className="text-[9px] text-text-muted mt-0.5">
+                            {item.unit} | {item.priority}
+                          </p>
                         </div>
                       ))}
                     </div>

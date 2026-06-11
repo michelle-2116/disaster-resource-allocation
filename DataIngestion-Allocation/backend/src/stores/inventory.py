@@ -98,7 +98,7 @@ def fetch_inventory() -> list[dict[str, Any]]:
     try:
         response = (
             client.table("inventory")
-            .select("id, item_type, item_name, available_quantity, location")
+            .select("id, item_type, item_name, available_quantity, location, shelter_id")
             .order("item_type")
             .order("item_name")
             .execute()
@@ -124,93 +124,130 @@ def fetch_inventory() -> list[dict[str, Any]]:
 
 def deduct_inventory(item_name: str, quantity: int) -> bool:
     """
-    Atomically deduct `quantity` from the row whose item_name matches.
-    Returns True on success, False if item not found or insufficient stock.
-
-    Uses a Postgres RPC function for atomicity — see migrations/003_rpc_deduct.sql.
-    Falls back to a read-modify-write if the RPC is unavailable (dev mode).
+    Deduct `quantity` from the inventory rows whose item_type/item_name matches.
+    Supports multi-row deduction if the quantity is distributed across duplicates.
     """
     client = _get_client()
-
     try:
-        result = client.rpc(
-            "deduct_inventory_quantity",
-            {"p_item_name": item_name, "p_quantity": quantity},
-        ).execute()
-
-        # The RPC returns True/False via a boolean column named "success"
-        if result.data and isinstance(result.data, list):
-            return bool(result.data[0].get("success", False))
+        response = client.table("inventory").select("*").execute()
+        rows = response.data or []
+        
+        canonical_target = _infer_item_type(item_name)
+        matching_rows = []
+        for row in rows:
+            row_item_name = row.get("item_name") or ""
+            row_item_type = row.get("item_type") or _infer_item_type(row_item_name)
+            if row_item_type.lower() == canonical_target.lower() or row_item_name.lower() == item_name.lower():
+                matching_rows.append(row)
+                
+        if not matching_rows:
+            logger.error("No matching inventory rows found for item: %s", item_name)
+            return False
+            
+        # Pre-check: Verify total available stock across all matching rows
+        total_available = 0
+        for row in matching_rows:
+            qty_col = "available_quantity" if "available_quantity" in row else "quantity"
+            total_available += int(row.get(qty_col, 0) or 0)
+            
+        if total_available < quantity:
+            logger.error(
+                "Insufficient inventory for '%s': total available %d, requested %d",
+                item_name, total_available, quantity
+            )
+            return False
+            
+        # Deduct from the first matching row that has sufficient quantity
+        for row in matching_rows:
+            qty_col = "available_quantity" if "available_quantity" in row else "quantity"
+            current = int(row.get(qty_col, 0) or 0)
+            if current >= quantity:
+                client.table("inventory").update({
+                    qty_col: current - quantity,
+                    "quantity": current - quantity
+                }).eq("id", row["id"]).execute()
+                logger.info("Deducted %d from single row ID %s", quantity, row["id"])
+                return True
+                
+        # If no single row has enough, try to deduct partially from matching rows
+        for row in matching_rows:
+            qty_col = "available_quantity" if "available_quantity" in row else "quantity"
+            current = int(row.get(qty_col, 0) or 0)
+            if current > 0:
+                deduct_qty = min(quantity, current)
+                client.table("inventory").update({
+                    qty_col: current - deduct_qty,
+                    "quantity": current - deduct_qty
+                }).eq("id", row["id"]).execute()
+                quantity -= deduct_qty
+                logger.info("Partially deducted %d from row ID %s", deduct_qty, row["id"])
+                if quantity <= 0:
+                    return True
+                    
         return False
-
-    except Exception as rpc_err:
-        logger.warning(
-            "RPC deduct_inventory_quantity failed (%s), falling back to "
-            "read-modify-write.", rpc_err
-        )
-        return _deduct_fallback(client, item_name, quantity)
-
-
-def _deduct_fallback(client: Client, item_name: str, quantity: int) -> bool:
-    """
-    Non-atomic fallback: read current quantity, verify sufficiency, update.
-    Acceptable for single-writer dev/test environments.
-    """
-    rows = (
-        client.table("inventory")
-        .select("*")
-        .eq("item_name", item_name)
-        .execute()
-        .data
-    )
-
-    if not rows:
-        logger.error("Inventory item not found: '%s'", item_name)
-        return False
-
-    row = rows[0]
-    quantity_column = "available_quantity" if "available_quantity" in row else "quantity"
-    if quantity_column not in row:
-        logger.error("Inventory quantity column not found for '%s'", item_name)
-        return False
-
-    current: int = int(row[quantity_column] or 0)
-
-    if current < quantity:
-        logger.error(
-            "Insufficient inventory for '%s': have %d, need %d",
-            item_name, current, quantity,
-        )
-        return False
-
-    try:
-        client.table("inventory").update(
-            {quantity_column: current - quantity}
-        ).eq("id", row["id"]).execute()
-        logger.info("Deducted %d units of '%s'", quantity, item_name)
-        return True
     except Exception as e:
-        logger.error("Fallback deduction failed: %s", e)
+        logger.error("Deduct inventory failed: %s", e, exc_info=True)
         return False
+
+
+def _resolve_warehouse_name(shelter_id: str | None, location: str | None) -> str:
+    loc = location or ""
+    if not loc or loc.lower() == "unknown":
+        loc = shelter_id or ""
+        
+    loc_lower = str(loc).lower()
+    if "kalpetta" in loc_lower or "delhi" in loc_lower:
+        return "Kalpetta District Warehouse"
+    elif "bathery" in loc_lower or "lucknow" in loc_lower:
+        return "Sulthan Bathery Relief Depot"
+    elif "manathavady" in loc_lower or "patna" in loc_lower or "mananthavady" in loc_lower:
+        return "Mananthavady Taluk Stock Point"
+    else:
+        # UUID mapping
+        if loc == "00000000-0000-0000-0000-000000000000":
+            return "Kalpetta District Warehouse"
+        elif loc == "e50c8408-f7c0-42f6-9c9b-1ed6747494e6":
+            return "Sulthan Bathery Relief Depot"
+        elif loc == "eee9ab04-1e8d-4438-9174-faa2e724bb6a":
+            return "Mananthavady Taluk Stock Point"
+        elif loc == "3a618815-5a0d-476f-8904-0a51252d3e4b":
+            return "Kalpetta District Warehouse"
+        elif loc == "4f38aacd-98c0-456e-b314-cbc73d556876":
+            return "Sulthan Bathery Relief Depot"
+        else:
+            return "Kalpetta District Warehouse"
 
 
 def inventory_to_markdown(rows: list[dict[str, Any]]) -> str:
     """
     Format inventory as a markdown table for Gemini context.
+    Group duplicates by their resolved warehouse name so Gemini sees aggregated stock.
     """
     if not rows:
         return "No inventory available."
+
+    # Group inventory by (item_type, item_name, resolved_warehouse_name)
+    grouped = {}
+    for row in rows:
+        item_type = row.get("item_type") or _infer_item_type(row.get("item_name") or "")
+        item_name = row.get("item_name") or "unknown"
+        available = int(row.get("available_quantity") or row.get("quantity") or 0)
+        
+        # Resolve the location to a friendly warehouse name
+        shelter_id = row.get("shelter_id")
+        loc_val = row.get("location")
+        warehouse_name = _resolve_warehouse_name(shelter_id, loc_val)
+        
+        key = (item_type, item_name, warehouse_name)
+        grouped[key] = grouped.get(key, 0) + available
 
     lines = [
         "| Item Type | Item Name | Available | Location |",
         "|-----------|-----------|-----------|----------|",
     ]
 
-    for row in rows:
-        item_type = row.get("item_type", "?")
-        item_name = row.get("item_name", "?")
-        available = row.get("available_quantity", 0)
-        location = row.get("location", "?")
-        lines.append(f"| {item_type} | {item_name} | {available} | {location} |")
+    # Sort grouped rows for a neat presentation
+    for (item_type, item_name, warehouse_name), qty in sorted(grouped.items()):
+        lines.append(f"| {item_type} | {item_name} | {qty} | {warehouse_name} |")
 
     return "\n".join(lines)

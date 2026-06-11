@@ -498,20 +498,6 @@ async def reset_demo(cascade: bool = True):
         reset_demo_db()
         logger.info("Demo database reset via API")
         
-        # Trigger Route-Optimizer system reset if cascade is True
-        if cascade:
-            import urllib.request
-            try:
-                req = urllib.request.Request(
-                    "http://127.0.0.1:8001/system/reset?cascade=false",
-                    method="POST",
-                    headers={"Content-Type": "application/json"}
-                )
-                with urllib.request.urlopen(req, timeout=3) as response:
-                    pass
-            except Exception as e:
-                logger.warning(f"Could not ping Route-Optimizer reset: {e}")
-
         # Also clear Supabase if configured
         if is_supabase_configured():
             try:
@@ -530,6 +516,20 @@ async def reset_demo(cascade: bool = True):
                 logger.info("Supabase database cleared and inventory reset via DataIngestion reset API")
             except Exception as e:
                 logger.error(f"Failed to clear Supabase database from DataIngestion reset: {e}")
+
+        # Trigger Route-Optimizer system reset if cascade is True
+        if cascade:
+            import urllib.request
+            try:
+                req = urllib.request.Request(
+                    "http://127.0.0.1:8001/system/reset?cascade=false",
+                    method="POST",
+                    headers={"Content-Type": "application/json"}
+                )
+                with urllib.request.urlopen(req, timeout=3) as response:
+                    pass
+            except Exception as e:
+                logger.warning(f"Could not ping Route-Optimizer reset: {e}")
 
         return {
             "status": "reset_complete",
