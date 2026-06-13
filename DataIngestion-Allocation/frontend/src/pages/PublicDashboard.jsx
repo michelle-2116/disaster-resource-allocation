@@ -17,7 +17,6 @@ const filterTabs = [
   { label: 'Medicine', value: 'send_meds' },
   { label: 'Water', value: 'send_water' },
   { label: 'Rescue', value: 'send_rescue_team' },
-  { label: 'Resources', value: 'reserve_resource' },
   { label: 'Taken', value: 'taken' },
 ];
 

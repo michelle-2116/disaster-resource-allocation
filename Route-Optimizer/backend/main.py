@@ -40,8 +40,7 @@ WAREHOUSES = [
             {"item_name": "Water", "quantity": 18000, "unit": "liters", "priority": "critical", "weight_kg": 0.001},
             {"item_name": "Food Rations", "quantity": 8400, "unit": "packs", "priority": "critical", "weight_kg": 0.8},
             {"item_name": "Medical Kits", "quantity": 620, "unit": "kits", "priority": "high", "weight_kg": 3.5},
-            {"item_name": "Blankets", "quantity": 2100, "unit": "units", "priority": "medium", "weight_kg": 1.1},
-            {"item_name": "Rescue Boats", "quantity": 14, "unit": "boats", "priority": "critical", "weight_kg": 95},
+            {"item_name": "Rescue Teams", "quantity": 14, "unit": "teams", "priority": "critical", "weight_kg": 95},
         ],
     },
     {
@@ -55,7 +54,7 @@ WAREHOUSES = [
             {"item_name": "Water", "quantity": 9000, "unit": "liters", "priority": "critical", "weight_kg": 0.001},
             {"item_name": "Food Rations", "quantity": 4700, "unit": "packs", "priority": "critical", "weight_kg": 0.8},
             {"item_name": "Medical Kits", "quantity": 280, "unit": "kits", "priority": "high", "weight_kg": 3.5},
-            {"item_name": "Fuel", "quantity": 3200, "unit": "liters", "priority": "high", "weight_kg": 0.74},
+            {"item_name": "Rescue Teams", "quantity": 8, "unit": "teams", "priority": "high", "weight_kg": 95},
         ],
     },
     {
@@ -69,7 +68,7 @@ WAREHOUSES = [
             {"item_name": "Water", "quantity": 7600, "unit": "liters", "priority": "critical", "weight_kg": 0.001},
             {"item_name": "Food Rations", "quantity": 3600, "unit": "packs", "priority": "critical", "weight_kg": 0.8},
             {"item_name": "Medical Kits", "quantity": 190, "unit": "kits", "priority": "high", "weight_kg": 3.5},
-            {"item_name": "Tarpaulins", "quantity": 850, "unit": "sheets", "priority": "medium", "weight_kg": 2.2},
+            {"item_name": "Rescue Teams", "quantity": 6, "unit": "teams", "priority": "medium", "weight_kg": 95},
         ],
     },
 ]
@@ -109,13 +108,12 @@ SYNONYMS = {
     "medical": "Medical Kits",
     "medicine": "Medical Kits",
     "medicines": "Medical Kits",
-    "blanket": "Blankets",
-    "blankets": "Blankets",
-    "boat": "Rescue Boats",
-    "boats": "Rescue Boats",
-    "fuel": "Fuel",
-    "tarpaulin": "Tarpaulins",
-    "tarpaulins": "Tarpaulins",
+    "team": "Rescue Teams",
+    "teams": "Rescue Teams",
+    "rescue": "Rescue Teams",
+    "ndrf": "Rescue Teams",
+    "boat": "Rescue Teams",
+    "boats": "Rescue Teams",
 }
 
 ROAD_LOCATIONS = {
@@ -201,14 +199,8 @@ def resolve_item_type(item: str) -> str:
         return "Food Rations"
     if "kit" in normalized or "med" in normalized or "tablet" in normalized or "ors" in normalized:
         return "Medical Kits"
-    if "boat" in normalized:
-        return "Rescue Boats"
-    if "blanket" in normalized:
-        return "Blankets"
-    if "fuel" in normalized:
-        return "Fuel"
-    if "tarpaulin" in normalized:
-        return "Tarpaulins"
+    if "team" in normalized or "rescue" in normalized or "ndrf" in normalized or "boat" in normalized:
+        return "Rescue Teams"
     return "Water"
 
 
@@ -1048,36 +1040,69 @@ async def reset_system(cascade: bool = True):
             res = supabase.table("inventory").select("*").execute()
             rows = res.data or []
             
-            # Group row IDs by (warehouse_id, canonical_item)
-            groups = {}
+            # Find all unique shelter_ids currently registered in the database
+            shelter_ids = set()
             for row in rows:
-                row_wh = resolve_warehouse_id(row)
-                row_canonical = resolve_item_type(row.get("item_name") or "")
-                key = (row_wh, row_canonical)
-                if key not in groups:
-                    groups[key] = []
-                groups[key].append(row)
-                
-            # For each group, find the default quantity and distribute it
-            for (wh_id, canonical), group_rows in groups.items():
-                default_qty = 10000
+                sid = row.get("shelter_id") or row.get("location")
+                if sid:
+                    shelter_ids.add(sid)
+            
+            # Ensure each shelter has all resources defined in its corresponding warehouse template
+            for shelter_id in shelter_ids:
+                wh_id = resolve_warehouse_id({"shelter_id": shelter_id})
                 wh_default = next((w for w in DEFAULT_WAREHOUSES if w["id"] == wh_id), None)
-                if wh_default:
-                    res_default = next((r for r in wh_default["resources"] if resolve_item_type(r["item_name"]) == canonical), None)
-                    if res_default:
-                        default_qty = res_default["quantity"]
+                if not wh_default:
+                    continue
                 
-                num_rows = len(group_rows)
-                base_qty = default_qty // num_rows
-                remainder = default_qty % num_rows
-                
-                for i, row in enumerate(group_rows):
-                    qty_col = "available_quantity" if "available_quantity" in row else "quantity"
-                    qty_to_set = base_qty + (1 if i < remainder else 0)
-                    supabase.table("inventory").update({
-                        qty_col: qty_to_set,
-                        "quantity": qty_to_set
-                    }).eq("id", row["id"]).execute()
+                for res_item in wh_default["resources"]:
+                    item_name = res_item["item_name"]
+                    canonical = resolve_item_type(item_name)
+                    
+                    # Find all database rows matching this shelter and item type
+                    matching_rows = []
+                    for row in rows:
+                        row_sid = row.get("shelter_id") or row.get("location")
+                        row_canonical = resolve_item_type(row.get("item_name") or "")
+                        if row_sid == shelter_id and row_canonical == canonical:
+                            matching_rows.append(row)
+                    
+                    default_qty = res_item["quantity"]
+                    
+                    if matching_rows:
+                        # Distribute default quantity among duplicate rows if they exist
+                        num_rows = len(matching_rows)
+                        base_qty = default_qty // num_rows
+                        remainder = default_qty % num_rows
+                        for i, row in enumerate(matching_rows):
+                            qty_col = "available_quantity" if "available_quantity" in row else "quantity"
+                            qty_to_set = base_qty + (1 if i < remainder else 0)
+                            supabase.table("inventory").update({
+                                qty_col: qty_to_set,
+                                "quantity": qty_to_set
+                            }).eq("id", row["id"]).execute()
+                    else:
+                        # Insert missing inventory row (e.g., Rescue Teams)
+                        new_row = {
+                            "item_name": item_name,
+                            "item_type": canonical.lower(),
+                            "quantity": default_qty,
+                            "available_quantity": default_qty,
+                            "unit": res_item["unit"],
+                            "shelter_id": shelter_id,
+                            "location": "Unknown"
+                        }
+                        # Normalize item_type field
+                        if "water" in item_name.lower():
+                            new_row["item_type"] = "water"
+                        elif "food" in item_name.lower():
+                            new_row["item_type"] = "food"
+                        elif "med" in item_name.lower():
+                            new_row["item_type"] = "meds"
+                        elif "team" in item_name.lower():
+                            new_row["item_type"] = "rescue_team"
+                            
+                        logger.info(f"Self-healing: Inserting missing {item_name} row for shelter {shelter_id}")
+                        supabase.table("inventory").insert(new_row).execute()
         except Exception as e:
             logger.error(f"Failed to reset Supabase inventory: {e}", exc_info=True)
             

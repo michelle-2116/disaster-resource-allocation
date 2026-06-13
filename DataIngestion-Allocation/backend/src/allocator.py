@@ -116,7 +116,7 @@ def _execute_tool_call(
     quantity = _get_quantity(tool_name, args)
 
     # Deduct inventory (rescue teams are tracked by team name / type)
-    success = deduct_inventory(item_name, quantity)
+    success = deduct_inventory(item_name, quantity, item_type)
     if not success:
         logger.warning(
             "Inventory deduction failed for '%s' × %d — marking as failed.",

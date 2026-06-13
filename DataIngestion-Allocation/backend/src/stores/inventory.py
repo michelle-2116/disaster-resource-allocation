@@ -122,7 +122,7 @@ def fetch_inventory() -> list[dict[str, Any]]:
     return rows
 
 
-def deduct_inventory(item_name: str, quantity: int) -> bool:
+def deduct_inventory(item_name: str, quantity: int, item_type: str | None = None) -> bool:
     """
     Deduct `quantity` from the inventory rows whose item_type/item_name matches.
     Supports multi-row deduction if the quantity is distributed across duplicates.
@@ -132,13 +132,25 @@ def deduct_inventory(item_name: str, quantity: int) -> bool:
         response = client.table("inventory").select("*").execute()
         rows = response.data or []
         
-        canonical_target = _infer_item_type(item_name)
+        canonical_target = item_type or _infer_item_type(item_name)
         matching_rows = []
-        for row in rows:
-            row_item_name = row.get("item_name") or ""
-            row_item_type = row.get("item_type") or _infer_item_type(row_item_name)
-            if row_item_type.lower() == canonical_target.lower() or row_item_name.lower() == item_name.lower():
-                matching_rows.append(row)
+        
+        if canonical_target == "rescue_team":
+            # For rescue teams, resolve target warehouse from destination location (item_name)
+            dest_warehouse = _resolve_warehouse_name(None, item_name)
+            for row in rows:
+                row_item_name = row.get("item_name") or ""
+                row_item_type = row.get("item_type") or _infer_item_type(row_item_name)
+                if row_item_type == "rescue_team":
+                    row_warehouse = _resolve_warehouse_name(row.get("shelter_id"), row.get("location"))
+                    if row_warehouse == dest_warehouse:
+                        matching_rows.append(row)
+        else:
+            for row in rows:
+                row_item_name = row.get("item_name") or ""
+                row_item_type = row.get("item_type") or _infer_item_type(row_item_name)
+                if row_item_type.lower() == canonical_target.lower() or row_item_name.lower() == item_name.lower():
+                    matching_rows.append(row)
                 
         if not matching_rows:
             logger.error("No matching inventory rows found for item: %s", item_name)

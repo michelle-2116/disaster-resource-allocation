@@ -3,8 +3,7 @@ export function getNeedTypeLabel(type) {
     send_food: 'Food',
     send_meds: 'Medicine',
     send_water: 'Water',
-    send_rescue_team: 'Rescue',
-    reserve_resource: 'Resource'
+    send_rescue_team: 'Rescue'
   };
   return map[type] || 'Resource';
 }
@@ -14,8 +13,7 @@ export function getNeedTypeColor(type) {
     send_food: 'text-accent-amber',
     send_meds: 'text-accent-red',
     send_water: 'text-accent-blue',
-    send_rescue_team: 'text-accent-red',
-    reserve_resource: 'text-gray-500'
+    send_rescue_team: 'text-accent-red'
   };
   return map[type] || 'text-gray-500';
 }
